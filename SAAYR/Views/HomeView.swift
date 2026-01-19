@@ -112,18 +112,15 @@ struct HomeView: View {
                             }
                             .padding(.horizontal)
                             
-                            let leaderboard: [LeaderboardUser] = [
-                                LeaderboardUser(name: "زيشان", level: 24, points: 1250, avatar: Image(systemName: "person.fill"), bgColor: .yellow.opacity(0.5)),
-                                LeaderboardUser(name: "شريف", level: 23, points: 900, avatar: Image(systemName: "star.fill"), bgColor: .gray.opacity(0.5)),
-                                LeaderboardUser(name: "عبدالله", level: 21, points: 780, avatar: Image(systemName: "flame.fill"), bgColor: .orange.opacity(0.5))
-                            ]
-                            
                             VStack(spacing: 12) {
-                                ForEach(leaderboard) { user in
+                                ForEach($userManager.leaderboardUsers) { user in
                                     LeaderboardCard(user: user)
                                 }
                             }
                             .padding(.horizontal)
+
+
+
                         }
                         
                         Spacer(minLength: 100)
@@ -160,13 +157,14 @@ struct Particle: Identifiable {
 }
 
 struct LeaderboardUser: Identifiable {
-    let id = UUID()
+    let id: Int        // use API id
     let name: String
     let level: Int
     let points: Int
-    let avatar: Image
+    let avatar: String?
     let bgColor: Color
 }
+
 
 // MARK: - Components
 struct TextButton: View {
@@ -383,8 +381,8 @@ struct StatCard: View {
 
 // MARK: - LeaderboardCard
 struct LeaderboardCard: View {
-    let user: LeaderboardUser
-    
+    @Binding var user: LeaderboardUser  // <-- only if you need to modify it
+
     var body: some View {
         HStack(spacing: 14) {
             // Avatar
@@ -392,12 +390,24 @@ struct LeaderboardCard: View {
                 Circle()
                     .fill(user.bgColor)
                     .frame(width: 55, height: 55)
-                user.avatar
-                    .resizable()
-                    .scaledToFit()
+                
+                if let url = URL(string: user.avatar ?? "") {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    } placeholder: {
+                        ProgressView()  // or a default avatar
+                    }
                     .frame(width: 30, height: 30)
+                } else {
+                    Image(systemName: "person.fill")  // fallback
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                }
             }
-            
+
             // Name + Level
             VStack(alignment: .leading, spacing: 4) {
                 Text(user.name)
@@ -421,6 +431,7 @@ struct LeaderboardCard: View {
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 }
+
 
 // MARK: - CircularProgressRing
 struct CircularProgressRing: View {

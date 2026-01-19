@@ -21,6 +21,11 @@ class WebService {
     static var login = baseUrl + "auth/login"
     static var forgotPasscode = baseUrl + "auth/forgot-passcode"
     static var resetPasscode = baseUrl + "auth/reset-passcode"
+    static var nearBy = baseUrl + "locations/nearby"
+    static var checkIn = baseUrl + "locations/check-in"
+    static var profile = baseUrl + "user/profile"
+    static var dashboard  = baseUrl + "user/dashboard"
+    static var leaderboard = baseUrl + "user/leaderboard"
    
     
 //#if DEBUG

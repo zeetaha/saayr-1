@@ -9,6 +9,7 @@ struct UserData: Codable {
     var totalXP: Int
     var checkInStreak: Int
     var checkInLogs: [CheckInLog]
+    var city: String       // <-- add this
     var transactions: [Transaction]
     var achievements: [Achievement]
     var groups: [String] // Group IDs
@@ -49,7 +50,7 @@ struct Transaction: Codable, Identifiable {
     let category: String
     let timestamp: Date
     let xpAwarded: Int
-    let pointsAwarded: Int
+    var pointsAwarded: Int
     let isPartner: Bool
     let multiplier: Int
 }
@@ -127,3 +128,40 @@ enum PetStage: String, Codable {
         }
     }
 }
+
+extension UserData {
+    static func fromProfile(_ profile: UserProfileResponse) -> UserData {
+        return UserData(
+            fullName: profile.fullName,
+            email: profile.email,
+            phoneNumber: "", // API doesn't provide phone, default to empty
+            petName: profile.falconName ?? "Falcon",
+            petType: "Unknown", // Or map if API provides
+            totalXP: profile.totalXP,
+            checkInStreak: 0, // Default or map if API provides
+            checkInLogs: [],
+            city: profile.city,
+            transactions: [],
+            achievements: [],
+            groups: []
+        )
+    }
+
+    static func fromProfileAndDashboard(profile: UserProfileResponse, dashboard: DashboardResponse) -> UserData {
+        return UserData(
+            fullName: profile.fullName,
+            email: profile.email,
+            phoneNumber: "", // API doesn't provide phone, default to empty
+            petName: profile.falconName ?? "Falcon",
+            petType: "Unknown",
+            totalXP: dashboard.total_xp,
+            checkInStreak: 0,
+            checkInLogs: [],
+            city: profile.city,
+            transactions: [],
+            achievements: [],
+            groups: []
+        )
+    }
+}
+
