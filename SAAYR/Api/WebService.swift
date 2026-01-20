@@ -12,7 +12,7 @@ class WebService {
 //    static var baseUrl = "http://100.27.214.146:8001/"
     
 
-    static var baseUrl = "http://api.saayr.sa/api/v1/"
+    static var baseUrl = "https://api.saayr.sa/api/v1/"
 
     static var sendOtp = baseUrl + "auth/send-otp"
     static var verifyOtp = baseUrl + "auth/verify-otp"

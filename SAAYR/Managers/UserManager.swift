@@ -26,9 +26,9 @@ class UserManager: ObservableObject {
 
         private var cancellables = Set<AnyCancellable>()
         
-        // MARK: - Init
+//        // MARK: - Init
         init() {
-            fetchAllUserData()
+          //  fetchAllUserData()
         }
         
     

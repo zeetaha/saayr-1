@@ -133,6 +133,7 @@ struct HomeView: View {
             }
             .onAppear {
                 generateParticles()
+                userManager.fetchAllUserData()
             }
         }
     }

@@ -4,7 +4,7 @@ struct PetSelectionView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var languageManager: LanguageManager
     @State private var petName: String = ""
-    
+    @State private var showError: Bool = false
     // Floating particles
     let particles = ["🦅", "🔥", "⚡", "👑"]
     
@@ -39,11 +39,11 @@ struct PetSelectionView: View {
                         
                         Text(languageManager.currentLanguage == .english ?
                              "Choose a name for your falcon companion.\nIt will grow with you on your journey!" :
-                             "اختر اسمًا لصقر رفيقك.\nسينمو معك في رحلتك!")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(4)
+                                "اختر اسمًا لصقر رفيقك.\nسينمو معك في رحلتك!")
+                        .font(.system(size: 16))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
                     }
                     .padding(.horizontal)
                     
@@ -76,20 +76,26 @@ struct PetSelectionView: View {
                             Text("⚠️")
                             Text(languageManager.currentLanguage == .english ?
                                  "Note: You won't be able to change the name later" :
-                                 "ملاحظة: لن تتمكن من تغيير الاسم لاحقًا")
-                                .font(.system(size: 13))
-                                .foregroundColor(Color(hex: "#BE123C"))
+                                    "ملاحظة: لن تتمكن من تغيير الاسم لاحقًا")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(hex: "#BE123C"))
                         }
                         .padding(12)
                         .background(Color(hex: "#FFF1F2"))
                         .cornerRadius(12)
                         
+                        if showError, let message = authManager.errorMessage {
+                            Text(message)
+                                .foregroundColor(.red)
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        
                         // Start Journey Button
                         Button(action: {
                             guard petName.count >= 2 else { return }
-
-                                authManager.tempPetName = petName
-                                authManager.completeSetup()
+                            
+                            authManager.tempPetName = petName
+                            authManager.completeSetup()
                         }) {
                             HStack {
                                 Text(languageManager.currentLanguage == .english ? "Start Your Journey" : "ابدأ رحلتك")
@@ -109,6 +115,15 @@ struct PetSelectionView: View {
                     .background(Color.white.opacity(0.9))
                     .cornerRadius(24)
                     .padding(.horizontal, 24)
+                    .onChange(of: authManager.errorMessage) { newValue in
+                        if newValue != nil {
+                            withAnimation {
+                                showError = true
+                            }
+                        }
+                    }
+                    
+                    
                     
                     Spacer(minLength: 40)
                 }

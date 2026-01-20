@@ -121,6 +121,13 @@ struct MapView: View {
         )
     }
     
+    @State var errorMessage: String = ""
+    @State var successMessage: String = ""
+    @State private var showAlert: Bool = false
+    @State private var showSuccessAlert: Bool = false // Separate success indicator
+    @State private var checkInSuccess: Bool? = true // nil: pending, true: success, false: failure
+    
+    
     // MARK: Check-In State
     @State private var isCheckingIn = false
     @State private var elapsedTime = 0
@@ -128,6 +135,7 @@ struct MapView: View {
     let checkInDuration = 10   // example 5 sec for demo; can be 120
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
     
     
     var body: some View {
@@ -158,14 +166,70 @@ struct MapView: View {
             }
             .ignoresSafeArea()
             
+            
+           
+            
             // MARK: HeaderCard - Only show after API response
-            if !locations.isEmpty {
+            if !locations.isEmpty && !showSuccessAlert && !showAlert{
                 VStack {
                     HeaderCard(nearbyCount: locations.count)
                     Spacer()
                 }
                 .animation(.easeIn, value: locations.count)
             }
+            
+            if showSuccessAlert {
+                VStack {
+                    Text(successMessage)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.green)
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+                        .padding(.top, 12) // Safe area padding
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(1)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                withAnimation {
+                                    showSuccessAlert = false
+                                    showAlert = false
+                                }
+                            }
+                        }
+                    Spacer()
+                }
+                
+            }
+            
+            // Error Banner
+            else if showAlert {
+                VStack{
+                    Text(errorMessage)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red)
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(1)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                withAnimation {
+                                    showSuccessAlert = false
+                                    showAlert = false
+                                }
+                            }
+                        }
+                    Spacer()
+                }
+            }
+            
+            
+            
             
             // MARK: Check-In Progress Card
             if isCheckingIn, let location = selectedLocation {
@@ -294,9 +358,17 @@ struct MapView: View {
             switch result {
             case .success(let response):
                 print("🎉 Check-in success:", response.message)
+                successMessage = response.message
+                showSuccessAlert = true
+                showAlert = false
+                checkInSuccess = true
                 // TODO: show popup / update XP / level
             case .failure(let error):
                 print("❌ Check-in failed:", error.localizedDescription)
+                errorMessage = error.localizedDescription
+                showAlert = true
+                showSuccessAlert = false
+                checkInSuccess = false
             }
             
             // Finally reset the UI
@@ -507,7 +579,7 @@ struct BottomCheckInCard: View {
                     .cornerRadius(16)
                 }
                 .disabled(!merchant.can_checkin) // disables button if cannot check in
-
+                
             }
             .padding()
             .background(.ultraThinMaterial)

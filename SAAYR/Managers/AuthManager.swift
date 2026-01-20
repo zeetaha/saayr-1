@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Alamofire
 
 enum AuthState {
     case onboarding
@@ -55,6 +56,11 @@ class AuthManager: ObservableObject {
         let parameters: [String: Any] = [
             "phone_number": "966" + phoneNumber
         ]
+        
+        print("➡️ Auth State:", self.authState)
+        print("➡️ Endpoint:", self.authState == .forgotPasscode
+              ? WebService.forgotPasscode
+              : WebService.sendOtp)
         
         ServiceModel.shared.postRequest(endpoint: self.authState == .forgotPasscode ? WebService.forgotPasscode : WebService.sendOtp ,
                                         parameters: parameters) { result in
@@ -474,6 +480,9 @@ class AuthManager: ObservableObject {
                     
                 case .failure(let error):
                     self.errorMessage = error.localizedDescription
+                    if let errorCode = error.responseCode , errorCode == 400 {
+                        self.errorMessage =  "Falcon name already taken"
+                    }
                     print("❌ API Error:", error.localizedDescription)
                 }
             }
