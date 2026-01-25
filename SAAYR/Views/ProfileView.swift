@@ -11,6 +11,12 @@ struct ProfileView: View {
     @State private var showSupport = false
     @State private var showSetting = false
 
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    @State private var showDeleteConfirm = false
+
+    
     var body: some View {
         ZStack {
             // MARK: Background Gradient
@@ -131,6 +137,22 @@ struct ProfileView: View {
                     .padding(.horizontal)
 
                     
+                    // MARK: Delete
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true   // 👈 ask first
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash.fill")
+                            Text("Delete Account")
+                                .fontWeight(.bold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                    
                     // MARK: Logout
                     Button(role: .destructive) {
                         authManager.logout()
@@ -163,6 +185,47 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSetting) {
             SettingsView()
+        }
+        .alert("Delete Account?",
+               isPresented: $showDeleteConfirm) {
+
+            Button("Delete", role: .destructive) {
+                DeleteApi()   // 🔥 Only here we call API
+            }
+
+            Button("Cancel", role: .cancel) {}
+
+        } message: {
+            Text("""
+            This action cannot be undone.
+            All your progress, rewards, and data will be permanently deleted.
+            """)
+        }
+
+    }
+    
+    private func DeleteApi() {
+        isLoading = true
+        errorMessage = nil
+
+        ServiceModel.shared.deleteRequest(
+            endpoint: WebService.deleteAccount
+        ) { result in
+
+            DispatchQueue.main.async {
+                self.isLoading = false
+
+                switch result {
+                case .success(let data):
+                    print("Account deleted:", String(data: data, encoding: .utf8) ?? "")
+
+                    // ✅ Clear user session / logout
+                    authManager.logout()
+
+                case .failure(let error):
+                    self.errorMessage = error.localizedDescription
+                }
+            }
         }
     }
 }
@@ -227,41 +290,94 @@ struct EditableInfoCard: View {
     @Binding var email: String
     let petName: String
     @Binding var isEditing: Bool
-    
+
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
     var body: some View {
         VStack(spacing: 16) {
             HStack {
                 Text("Personal Information")
                     .font(.headline)
-                
+
                 Spacer()
-                
+
                 Button {
-                    isEditing.toggle()
+                    if isEditing {
+                        updateProfile()   // 🔥 Call API on Save
+                    } else {
+                        isEditing = true
+                    }
                 } label: {
-                    Label(isEditing ? "Save" : "Edit", systemImage: isEditing ? "checkmark" : "pencil")
+                    Label(isEditing ? "Save" : "Edit",
+                          systemImage: isEditing ? "checkmark" : "pencil")
                         .font(.subheadline)
                 }
+                .disabled(isLoading)
             }
-            
+
             TextField("Full Name", text: $fullName)
                 .textFieldStyle(.roundedBorder)
                 .disabled(!isEditing)
-            
+
             TextField("Email", text: $email)
                 .textFieldStyle(.roundedBorder)
                 .disabled(!isEditing)
-            
+
             TextField("Pet Name", text: .constant(petName))
                 .textFieldStyle(.roundedBorder)
                 .disabled(true)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .font(.caption)
+            }
         }
         .padding()
         .background(Color.white.opacity(0.9))
         .cornerRadius(20)
         .shadow(radius: 6)
     }
+    
+    private func updateProfile() {
+        isLoading = true
+        errorMessage = nil
+
+        let body: [String: Any] = [
+            "full_name": fullName,
+            "email": email,
+            "avatar": ""
+        ]
+
+        ServiceModel.shared.putRequest(
+            endpoint: WebService.updateProfile,
+            parameters: body
+        ) { result in
+
+            DispatchQueue.main.async {
+                self.isLoading = false
+
+                switch result {
+                case .success(let data):
+                    // Optional: decode response if needed
+                    print("Profile updated:", String(data: data, encoding: .utf8) ?? "")
+
+                    withAnimation {
+                        self.isEditing = false   // ✅ Exit edit mode
+                    }
+
+                case .failure(let error):
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
 }
+
+
+
 
 struct StatCardProfile: View {
     let icon: String

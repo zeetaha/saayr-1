@@ -112,6 +112,11 @@ struct HomeView: View {
                             }
                             .padding(.horizontal)
                             
+                            Text( "Riyadh")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.gray)
+                                .padding(.leading)
+                            
                             VStack(spacing: 12) {
                                 ForEach($userManager.leaderboardUsers) { user in
                                     LeaderboardCard(user: user)

@@ -26,6 +26,8 @@ class WebService {
     static var profile = baseUrl + "user/profile"
     static var dashboard  = baseUrl + "user/dashboard"
     static var leaderboard = baseUrl + "user/leaderboard"
+    static var updateProfile = baseUrl + "user/profile"
+    static var deleteAccount = baseUrl + "user/account"
    
     
 //#if DEBUG

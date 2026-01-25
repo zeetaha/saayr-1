@@ -5,7 +5,9 @@ struct SettingsView: View {
     @EnvironmentObject var authManager: AuthManager
     @Environment(\.dismiss) var dismiss
     @State private var showLogoutConfirm = false
-    
+    @State private var showWeb = false
+    @State private var selectedURL: URL?
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -49,7 +51,25 @@ struct SettingsView: View {
                                     icon: "lock.shield.fill",
                                     label: languageManager.text("settings.privacyPolicy"),
                                     gradient: [Color.purple, Color(hex: "#8B5CF6")]
-                                )
+                                ) {
+                                    selectedURL = URL(string: "https://api.saayr.sa/api/v1/legal/privacy-policy")
+                                    showWeb = true
+                                }
+                                .sheet(isPresented: $showWeb) {
+                                    if let selectedURL {
+                                        SafariView(url: selectedURL)
+                                    }
+                                }
+
+                                NavigationSettingsRow(
+                                    icon: "doc.text.fill",
+                                    label: languageManager.text("settings.termsAndConditions"),
+                                    gradient: [Color.blue, Color(hex: "#3B82F6")]
+                                ) {
+                                    selectedURL = URL(string: "https://api.saayr.sa/api/v1/legal/terms-and-conditions")
+                                    showWeb = true
+                                }
+
                                 
                                 Divider()
                                     .padding(.leading, 70)
@@ -189,10 +209,14 @@ struct NavigationSettingsRow: View {
     let label: String
     let gradient: [Color]
     var subtitle: String? = nil
+    var action: (() -> Void)? = nil
+
     @EnvironmentObject var languageManager: LanguageManager
-    
+
     var body: some View {
-        NavigationLink(destination: SettingsDetailView(title: label)) {
+        Button {
+            action?()
+        } label: {
             HStack(spacing: 16) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
@@ -204,26 +228,29 @@ struct NavigationSettingsRow: View {
                             )
                         )
                         .frame(width: 36, height: 36)
-                    
+
                     Image(systemName: icon)
                         .font(.system(size: 18))
                         .foregroundColor(.white)
                 }
-                
-                VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 2) {
+
+                VStack(
+                    alignment: languageManager.currentLanguage == .english ? .leading : .trailing,
+                    spacing: 2
+                ) {
                     Text(label)
                         .font(.system(size: 17))
                         .foregroundColor(.primary)
-                    
+
                     if let subtitle = subtitle {
                         Text(subtitle)
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.secondary)
@@ -233,6 +260,7 @@ struct NavigationSettingsRow: View {
         }
     }
 }
+
 
 struct SettingsDetailView: View {
     let title: String

@@ -1,9 +1,21 @@
 import SwiftUI
+import SafariServices
+
+
+struct WebPage: Identifiable {
+    let id = UUID()
+    let url: URL
+}
 
 struct PhoneAuthView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var languageManager: LanguageManager
     @FocusState private var isPhoneFocused: Bool
+    
+    @State private var showWeb = false
+    @State private var selectedPage: WebPage? = nil
+
+
     
     let gradientColors: [Color] = [
         Color(hex: "#3B82F6"),
@@ -130,25 +142,37 @@ struct PhoneAuthView: View {
                             .font(.footnote)
                     }
                     
-                    // ✅ TERMS & PRIVACY — UNCHANGED
                     VStack(spacing: 8) {
-                        Text(languageManager.currentLanguage == .english ?
-                             "By continuing, you agree to our" :
-                                "بالمتابعة، أنت توافق على")
-                        .font(.system(size: 13))
-                        .foregroundColor(.gray)
-                        
+                        Text(languageManager.text("legal.agreeText"))
+                            .font(.system(size: 13))
+                            .foregroundColor(.gray)
+
                         HStack(spacing: 4) {
-                            Button("Terms of Service") {}
-                                .underline()
-                            Text("&")
-                            Button("Privacy Policy") {}
-                                .underline()
+                            Button(languageManager.text("legal.terms")) {
+                                if let url = URL(string: "https://api.saayr.sa/api/v1/legal/terms-and-conditions") {
+                                    selectedPage = WebPage(url: url)
+                                }
+                            }
+                            .underline()
+
+                            Text(languageManager.text("legal.and"))
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+
+                            Button(languageManager.text("legal.privacy")) {
+                                if let url = URL(string: "https://api.saayr.sa/api/v1/legal/privacy-policy") {
+                                    selectedPage = WebPage(url: url)
+                                }
+                            }
+                            .underline()
                         }
                         .font(.system(size: 13, weight: .semibold))
                     }
                     .padding(.top, 24)
-                    
+
+
+
+
                     Spacer(minLength: 40)
                 }
             }
@@ -156,8 +180,27 @@ struct PhoneAuthView: View {
         .onAppear {
             isPhoneFocused = true
         }
+        .sheet(item: $selectedPage) { page in
+            SafariView(url: page.url)
+        }
+
+
+        
     }
+
 }
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+
 
 
 // Custom TextField placeholder modifier

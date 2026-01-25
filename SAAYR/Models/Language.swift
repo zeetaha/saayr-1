@@ -68,6 +68,7 @@ struct Translations {
         "settings.language": "Language",
         "settings.privacy": "Privacy & Security",
         "settings.privacyPolicy": "Privacy Policy",
+        "settings.termsAndConditions": "Terms & Conditions",
         "settings.changePassword": "Change Password",
         "settings.about": "About",
         "settings.aboutSaayr": "About Saayr",
@@ -123,6 +124,12 @@ struct Translations {
         "common.done": "Done",
         "common.loading": "Loading...",
         "common.confirm": "Confirm",
+        
+        //legal
+        "legal.agreeText": "By continuing, you agree to our",
+        "legal.and": "&",
+        "legal.terms": "Terms of Service",
+        "legal.privacy": "Privacy Policy"
     ]
     
     static let arabic: [String: String] = [
@@ -162,6 +169,7 @@ struct Translations {
         "settings.language": "اللغة",
         "settings.privacy": "الخصوصية والأمان",
         "settings.privacyPolicy": "سياسة الخصوصية",
+        "settings.termsAndConditions": "الشروط والأحكام",
         "settings.changePassword": "تغيير كلمة المرور",
         "settings.about": "حول",
         "settings.aboutSaayr": "حول سيّار",
@@ -216,5 +224,11 @@ struct Translations {
         "common.done": "تم",
         "common.loading": "...جارٍ التحميل",
         "common.confirm": "تأكيد",
+        
+        //legal
+        "legal.agreeText": "بالمتابعة، أنت توافق على",
+        "legal.and": "و",
+        "legal.terms": "الشروط والأحكام",
+        "legal.privacy": "سياسة الخصوصية"
     ]
 }
