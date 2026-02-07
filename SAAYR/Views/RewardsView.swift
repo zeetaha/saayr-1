@@ -22,7 +22,7 @@ struct RewardsView: View {
                 VStack(spacing: 24) {
                     
                     // Header
-                    VStack(alignment: .leading, spacing: 8) {
+//                    VStack(alignment: .leading, spacing: 8) {
                         Text(languageManager.text("rewards.title"))
                             .font(.system(size: 32, weight: .bold))
                             .foregroundColor(.black)
@@ -31,43 +31,45 @@ struct RewardsView: View {
                             .font(.system(size: 16))
                             .foregroundColor(.gray)
                         
-                        // XP Balance Card
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.blue)
-                            .frame(height: 100)
-                            .overlay(
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(languageManager.text("rewards.yourXP"))
-                                            .foregroundColor(.white.opacity(0.8))
-                                            .font(.system(size: 14))
-                                        
-                                        Text("\(userManager.userData.totalXP)")
-                                            .font(.system(size: 32, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "star.fill")
-                                        .resizable()
-                                        .frame(width: 48, height: 48)
-                                        .foregroundColor(.white)
-                                }
-                                .padding()
-                            )
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 24)
-                    
+//                        // XP Balance Card
+//                        RoundedRectangle(cornerRadius: 20)
+//                            .fill(Color.blue)
+//                            .frame(height: 100)
+//                            .overlay(
+//                                HStack {
+//                                    VStack(alignment: .leading, spacing: 4) {
+//                                        Text(languageManager.text("rewards.yourXP"))
+//                                            .foregroundColor(.white.opacity(0.8))
+//                                            .font(.system(size: 14))
+//                                        
+//                                        Text("\(userManager.userData.totalXP)")
+//                                            .font(.system(size: 32, weight: .bold))
+//                                            .foregroundColor(.white)
+//                                    }
+//                                    Spacer()
+//                                    Image(systemName: "star.fill")
+//                                        .resizable()
+//                                        .frame(width: 48, height: 48)
+//                                        .foregroundColor(.white)
+//                                }
+//                                .padding()
+//                            )
+//                    }
+//                    .padding(.horizontal)
+//                    .padding(.top, 24)
+                    Text(languageManager.text("No Records Available"))
+                        .foregroundColor(.black.opacity(0.8))
+                        .font(.system(size: 14))
                     // Rewards List
-                    VStack(spacing: 16) {
-                        ForEach(rewards) { reward in
-                            RewardCard(reward: reward) { selected in
-                                selectedReward = selected
-                                showRedeemDialog = true
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
+//                    VStack(spacing: 16) {
+//                        ForEach(rewards) { reward in
+//                            RewardCard(reward: reward) { selected in
+//                                selectedReward = selected
+//                                showRedeemDialog = true
+//                            }
+//                        }
+//                    }
+//                    .padding(.horizontal)
                 }
             }
         }

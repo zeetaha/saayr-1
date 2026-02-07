@@ -7,6 +7,7 @@
 
 import Foundation
 import Alamofire
+import UIKit
 
 
 class ServiceModel {
@@ -87,6 +88,40 @@ class ServiceModel {
                    }
                }
        }
+
+    // MARK: - Multipart Form Data POST Request (for file uploads)
+    func multipartPostRequest(endpoint: String, parameters: [String: Any]? = nil, images: [UIImage]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
+        AF.upload(multipartFormData: { multipartFormData in
+            // Add text parameters
+            if let params = parameters {
+                for (key, value) in params {
+                    if let stringValue = value as? String {
+                        multipartFormData.append(stringValue.data(using: .utf8) ?? Data(), withName: key)
+                    } else if let intValue = value as? Int {
+                        multipartFormData.append("\(intValue)".data(using: .utf8) ?? Data(), withName: key)
+                    }
+                }
+            }
+            
+            // Add images
+            if let images = images {
+                for (index, image) in images.enumerated() {
+                    if let jpegData = image.jpegData(compressionQuality: 0.8) {
+                        multipartFormData.append(jpegData, withName: "images", fileName: "image_\(index).jpg", mimeType: "image/jpeg")
+                    }
+                }
+            }
+        }, to: endpoint, headers: getHeader())
+            .validate()
+            .responseData { response in
+                switch response.result {
+                case .success(let data):
+                    completion(.success(data))
+                case .failure(let error):
+                    completion(.failure(error))
+                }
+            }
+    }
     
     func getHeader()-> HTTPHeaders{
         var headers: HTTPHeaders = [

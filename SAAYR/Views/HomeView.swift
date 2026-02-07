@@ -28,108 +28,29 @@ struct HomeView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // MARK: Greeting
-                        HStack {
-                            VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 4) {
-                                Text(languageManager.currentLanguage == .english ? "Welcome back," : "مرحبًا بك مجددًا،")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.gray)
-                                
-                                Text(userManager.userData.fullName.components(separatedBy: " ").first! + " 👋")
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(.black)
-                            }
-                            Spacer()
-                            
-                            // Points Badge (like Surface in Compose)
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "star.fill")
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 18, height: 18)
-                                            .foregroundColor(.white)
-                                        
-                                        Text("\(userManager.userData.points)")
-                                            .font(.system(size: 16, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 20)
-                                            .fill(userManager.stageColor)
-                                            .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
-                                    )
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 16)
-                        
-                        
-                        // MARK: Pet Display Card
-                        PetDisplayCard(
-                            petName: userManager.userData.petName,
-                            level: userManager.userData.level,
-                            stage: userManager.userData.petStage,
-                            xpProgress: userManager.userData.xpProgress
-                        )
-                        .padding(.horizontal)
-                        
-                        // MARK: Stats Grid
-                        HStack(spacing: 12) {
-                            StatCard(
-                                icon: "star.fill",
-                                label: languageManager.currentLanguage == .english ? "Total XP" : "إجمالي XP",
-                                value: "\(userManager.userData.totalXP)",
-                                gradient: [Color.blue, Color.cyan]
+                        // Center content and limit max width for iPad
+                        VStack(spacing: 24) {
+                            greetingSection
+                            PetDisplayCard(
+                                petName: userManager.userData.petName,
+                                level: userManager.userData.level,
+                                stage: userManager.userData.petStage,
+                                xpProgress: userManager.userData.xpProgress
                             )
-                            StatCard(
-                                icon: "map.fill",
-                                label: languageManager.currentLanguage == .english ? "Check-ins" : "التسجيلات",
-                                value: "\(userManager.userData.checkInCount)",
-                                gradient: [Color.green, Color.teal]
-                            )
-                            StatCard(
-                                icon: "bolt.fill",
-                                label: languageManager.currentLanguage == .english ? "Level" : "المستوى",
-                                value: "\(userManager.userData.level)",
-                                gradient: [Color.purple, Color.pink]
-                            )
-                        }
-                        .padding(.horizontal)
-                        
-                        PVPBattleCard {
-                            showPVPPayment = true
-                        }
-                        
-                        // MARK: Leaderboard Section
-                        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 12) {
-                            HStack {
-                                Text(languageManager.currentLanguage == .english ? "Leaderboard" : "قائمة المتصدرين")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(.black)
-                                Spacer()
-                                TextButton(title: languageManager.currentLanguage == .english ? "View All" : "عرض الكل") {}
-                            }
                             .padding(.horizontal)
                             
-                            Text( "Riyadh")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.gray)
-                                .padding(.leading)
-                            
-                            VStack(spacing: 12) {
-                                ForEach($userManager.leaderboardUsers) { user in
-                                    LeaderboardCard(user: user)
-                                }
-                            }
-                            .padding(.horizontal)
-
-
-
+                            statsGrid
+//                            PVPBattleCard {
+//                                showPVPPayment = true
+//                            }
+                            leaderboardSection
                         }
+                        .frame(maxWidth: 700) // Limit width on iPad
+                        .padding(.horizontal)
                         
                         Spacer(minLength: 100)
                     }
+                    .frame(maxWidth: .infinity) // Center content on wider screens
                 }
             }
             .navigationBarHidden(true)
@@ -141,13 +62,105 @@ struct HomeView: View {
                 userManager.fetchAllUserData()
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // Fix iPad NavigationView
     }
     
+    // MARK: - Sections
+    
+    private var greetingSection: some View {
+        HStack {
+            VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 4) {
+                Text(languageManager.currentLanguage == .english ? "Welcome back," : "مرحبًا بك مجددًا،")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                
+                Text(userManager.userData.fullName.components(separatedBy: " ").first! + " 👋")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.black)
+            }
+            Spacer()
+            
+            // Points Badge
+            HStack(spacing: 6) {
+                Image(systemName: "star.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                    .foregroundColor(.white)
+                
+                Text("\(userManager.userData.points)")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(userManager.stageColor)
+                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+            )
+        }
+        .padding(.top, 16)
+    }
+    
+    private var statsGrid: some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+        
+        return LazyVGrid(columns: columns, spacing: 12) {
+            StatCard(
+                icon: "star.fill",
+                label: languageManager.currentLanguage == .english ? "Total XP" : "إجمالي XP",
+                value: "\(userManager.userData.totalXP)",
+                gradient: [Color.blue, Color.cyan]
+            )
+            StatCard(
+                icon: "map.fill",
+                label: languageManager.currentLanguage == .english ? "Check-ins" : "التسجيلات",
+                value: "\(userManager.userData.checkInCount)",
+                gradient: [Color.green, Color.teal]
+            )
+            StatCard(
+                icon: "bolt.fill",
+                label: languageManager.currentLanguage == .english ? "Level" : "المستوى",
+                value: "\(userManager.userData.level)",
+                gradient: [Color.purple, Color.pink]
+            )
+        }
+        .padding(.vertical)
+    }
+
+    
+    private var leaderboardSection: some View {
+        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 12) {
+            HStack {
+                Text(languageManager.currentLanguage == .english ? "Leaderboard" : "قائمة المتصدرين")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.black)
+                Spacer()
+                TextButton(title: languageManager.currentLanguage == .english ? "View All" : "عرض الكل") {}
+            }
+            
+            Text("Riyadh")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.gray)
+            
+            VStack(spacing: 12) {
+                ForEach($userManager.leaderboardUsers) { user in
+                    LeaderboardCard(user: user)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Particles
     func generateParticles() {
+        let screenWidth = UIScreen.main.bounds.width
+        let screenHeight = UIScreen.main.bounds.height
+        
         particles = (0..<15).map { _ in
             Particle(
-                x: CGFloat.random(in: -200...200),
-                y: CGFloat.random(in: -400...800),
+                x: CGFloat.random(in: -screenWidth/2...screenWidth/2),
+                y: CGFloat.random(in: -screenHeight/2...screenHeight/2),
                 size: CGFloat.random(in: 20...60)
             )
         }

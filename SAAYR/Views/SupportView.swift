@@ -4,6 +4,9 @@ struct SupportView: View {
     @EnvironmentObject var languageManager: LanguageManager
     @Environment(\.dismiss) var dismiss
     @State private var expandedFAQ: String?
+    @State private var showHelpCenter: Bool = false
+    @State private var showSubmitTicket: Bool = false
+    @State private var showMyTickets: Bool = false
     
     let faqs = [
         FAQ(
@@ -44,7 +47,7 @@ struct SupportView: View {
     ]
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color(UIColor.systemGroupedBackground)
                     .ignoresSafeArea()
@@ -53,50 +56,66 @@ struct SupportView: View {
                     VStack(spacing: 24) {
                         // Contact Cards
                         VStack(spacing: 12) {
+//                            ContactCard(
+//                                icon: "envelope.fill",
+//                                title: "Email Us",
+//                                titleAr: "راسلنا عبر البريد الإلكتروني",
+//                                subtitle: "zeeshan@saayr.sa",
+//                                gradient: [Color.blue, Color.cyan]
+//                            )
+//                            
                             ContactCard(
-                                icon: "envelope.fill",
-                                title: "Email Us",
-                                titleAr: "راسلنا عبر البريد الإلكتروني",
-                                subtitle: "support@saayr.sa",
+                                icon: "info.circle.fill",
+                                title: "Help Center",
+                                titleAr: "مركز المساعدة",
+                                subtitle: "Frequently Asked Questions",
                                 gradient: [Color.blue, Color.cyan]
                             )
-                            
+                            .onTapGesture {
+                                showHelpCenter = true
+                            }
+
                             ContactCard(
-                                icon: "phone.fill",
-                                title: "Call Us",
-                                titleAr: "اتصل بنا",
-                                subtitle: "+966 11 234 5678",
-                                gradient: [Color.green, Color.teal]
+                                icon: "envelope.fill",
+                                title: "Submit Ticket",
+                                titleAr: "إرسال تذكرة",
+                                subtitle: "Frequently Asked Questions",
+                                gradient: [Color.purple.opacity(0.7), Color.indigo.opacity(0.9)]
                             )
-                            
+                            .onTapGesture {
+                                showSubmitTicket = true
+                            }
+
                             ContactCard(
-                                icon: "bubble.left.and.bubble.right.fill",
-                                title: "Live Chat",
-                                titleAr: "الدردشة المباشرة",
-                                subtitle: "Available 24/7",
-                                gradient: [Color.purple, Color.pink]
+                                icon: "list.bullet",
+                                title: "My Tickets",
+                                titleAr: "تذاكري",
+                                subtitle: "View your support tickets",
+                                gradient: [Color.yellow.opacity(0.7), Color.orange.opacity(0.9)]
                             )
+                            .onTapGesture {
+                                showMyTickets = true
+                            }
+
+//                            ContactCard(
+//                                icon: "phone.fill",
+//                                title: "Call Us",
+//                                titleAr: "اتصل بنا",
+//                                subtitle: "+966 11 234 5678",
+//                                gradient: [Color.green, Color.teal]
+//                            )
+//                            
+//                            ContactCard(
+//                                icon: "bubble.left.and.bubble.right.fill",
+//                                title: "Live Chat",
+//                                titleAr: "الدردشة المباشرة",
+//                                subtitle: "Available 24/7",
+//                                gradient: [Color.purple, Color.pink]
+//                            )
                         }
                         .padding(.horizontal)
                         
-                        // FAQ Section
-                        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 16) {
-                            Text(languageManager.text("support.faq"))
-                                .font(.system(size: 20, weight: .bold))
-                                .padding(.horizontal)
-                            
-                            ForEach(faqs) { faq in
-                                FAQItem(
-                                    faq: faq,
-                                    isExpanded: expandedFAQ == faq.id
-                                ) {
-                                    withAnimation {
-                                        expandedFAQ = expandedFAQ == faq.id ? nil : faq.id
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
+                        // (Moved FAQ Section to HelpCenterView presented fullscreen)
                         
                         Spacer(minLength: 50)
                     }
@@ -114,9 +133,76 @@ struct SupportView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showHelpCenter) {
+            HelpCenterView(faqs: faqs)
+                .environmentObject(languageManager)
+        }
+        .fullScreenCover(isPresented: $showSubmitTicket) {
+            SubmitTicketView()
+                .environmentObject(languageManager)
+        }
+        .fullScreenCover(isPresented: $showMyTickets) {
+            MyTicketsView()
+                .environmentObject(languageManager)
+        }
         .environment(\.layoutDirection, languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight)
     }
 }
+
+
+
+
+struct Ticket: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let message: String
+    let timeAgo: String
+    let status: TicketStatus
+}
+
+
+enum TicketStatus {
+    case inProgress, resolved, open
+}
+
+
+
+struct StatusBadge: View {
+    let status: TicketStatus
+    var body: some View {
+        Text(label)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .background(badgeColor)
+            .cornerRadius(12)
+    }
+
+    var label: String {
+        switch status {
+        case .inProgress: return "In Progress"
+        case .resolved: return "Resolved"
+        case .open: return "Open"
+        }
+    }
+
+    var badgeColor: Color {
+        switch status {
+        case .inProgress: return Color.orange
+        case .resolved: return Color.green
+        case .open: return Color.blue
+        }
+    }
+}
+
+struct MessageItem: Identifiable {
+    let id = UUID()
+    let text: String
+    let isUser: Bool
+    let time: String
+}
+
 
 struct FAQ: Identifiable {
     let id: String
@@ -152,7 +238,11 @@ struct ContactCard: View {
                     .foregroundColor(.white)
             }
             
-            VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 4) {
+            var textAlignment: HorizontalAlignment {
+                languageManager.currentLanguage == .english ? .leading : .trailing
+            }
+
+            VStack(alignment: textAlignment, spacing: 4) {
                 Text(languageManager.currentLanguage == .english ? title : titleAr)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.primary)
@@ -167,45 +257,6 @@ struct ContactCard: View {
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.secondary)
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(UIColor.secondarySystemGroupedBackground))
-        )
-    }
-}
-
-struct FAQItem: View {
-    let faq: FAQ
-    let isExpanded: Bool
-    let action: () -> Void
-    @EnvironmentObject var languageManager: LanguageManager
-    
-    var body: some View {
-        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 12) {
-            Button(action: action) {
-                HStack {
-                    Text(languageManager.currentLanguage == .english ? faq.question : faq.questionAr)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(languageManager.currentLanguage == .english ? .leading : .trailing)
-                    
-                    Spacer()
-                    
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            if isExpanded {
-                Text(languageManager.currentLanguage == .english ? faq.answer : faq.answerAr)
-                    .font(.system(size: 15))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(languageManager.currentLanguage == .english ? .leading : .trailing)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .padding()
         .background(

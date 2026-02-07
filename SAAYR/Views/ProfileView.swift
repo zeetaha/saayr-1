@@ -180,8 +180,8 @@ struct ProfileView: View {
         .sheet(isPresented: $showGroups) {
             GroupsView()
         }
-        .sheet(isPresented: $showSupport) {
-            SupportView()
+        .fullScreenCover(isPresented: $showSupport) {
+                SupportView()
         }
         .sheet(isPresented: $showSetting) {
             SettingsView()

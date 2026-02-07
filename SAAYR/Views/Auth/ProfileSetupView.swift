@@ -119,7 +119,9 @@ struct ProfileSetupView: View {
                     // Continue Button
                     Button(action: {
                         if fullName.count < 2 { return }
-                        if !email.isEmpty && !email.contains("@") { return }
+                        if !email.isEmpty && !email.contains("@") {
+                            return
+                        }
                         authManager.tempFullName = fullName
                         authManager.tempEmail = email
                         authManager.completeProfileSetup()

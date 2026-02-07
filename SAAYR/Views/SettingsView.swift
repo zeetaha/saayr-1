@@ -74,11 +74,11 @@ struct SettingsView: View {
                                 Divider()
                                     .padding(.leading, 70)
                                 
-                                NavigationSettingsRow(
-                                    icon: "key.fill",
-                                    label: languageManager.text("settings.changePassword"),
-                                    gradient: [Color.orange, Color.red]
-                                )
+//                                NavigationSettingsRow(
+//                                    icon: "key.fill",
+//                                    label: languageManager.text("settings.changePassword"),
+//                                    gradient: [Color.orange, Color.red]
+//                                )
                             }
                             .background(Color(UIColor.secondarySystemGroupedBackground))
                             .cornerRadius(12)

@@ -1,0 +1,285 @@
+//
+//  SubmitTicketView.swift
+//  SAAYR
+//
+//  Created by Awais Raza on 08/02/2026.
+//
+
+import SwiftUI
+import PhotosUI
+import Alamofire
+
+struct SubmitTicketView: View {
+    @EnvironmentObject var languageManager: LanguageManager
+    @Environment(\.dismiss) var dismiss
+    @State private var subject: String = ""
+    @State private var descriptionText: String = ""
+    @State private var selectedImages: [UIImage] = []
+    @State private var photosPickerItem: [PhotosPickerItem] = []
+    @State private var isSubmitting: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var successMessage: String = ""
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(UIColor.systemGroupedBackground)
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 24) {
+                        Text("Create Support Ticket")
+                            .font(.system(size: 28, weight: .bold))
+                            .padding(.top, 20)
+
+                        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 16) {
+                            Group {
+                                Text("Subject")
+                                    .font(.system(size: 16, weight: .semibold))
+
+                                TextField("Brief description of your issue", text: $subject)
+                                    .padding()
+                                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.2)))
+
+                                Text("Description")
+                                    .font(.system(size: 16, weight: .semibold))
+
+                                TextEditor(text: $descriptionText)
+                                    .frame(height: 160)
+                                    .padding(8)
+                                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.2)))
+                            }
+
+                            Text("Attach Photos (Optional)")
+                                .font(.system(size: 16, weight: .semibold))
+
+                            PhotosPicker(
+                                selection: $photosPickerItem,
+                                maxSelectionCount: 5,
+                                matching: .images
+                            ) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "camera.fill")
+                                        .foregroundColor(Color.blue)
+                                    Text("Add Photos")
+                                        .foregroundColor(Color.blue)
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.blue.opacity(0.25), lineWidth: 2)
+                                        .background(Color(UIColor.systemBackground).cornerRadius(12))
+                                )
+                            }
+                            .onChange(of: photosPickerItem) { newItems in
+                                loadPhotos(newItems)
+                            }
+
+                            Text("You can attach multiple photos to help us understand your issue")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+
+                            if !selectedImages.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Selected Photos (\(selectedImages.count))")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.secondary)
+
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 12) {
+                                            ForEach(selectedImages.indices, id: \.self) { index in
+                                                ZStack(alignment: .topTrailing) {
+                                                    Image(uiImage: selectedImages[index])
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                        .frame(width: 80, height: 80)
+                                                        .cornerRadius(8)
+                                                        .clipped()
+
+                                                    Button(action: {
+                                                        selectedImages.remove(at: index)
+                                                    }) {
+                                                        Image(systemName: "xmark.circle.fill")
+                                                            .foregroundColor(.white)
+                                                            .background(Circle().fill(Color.red))
+                                                            .font(.system(size: 18))
+                                                    }
+                                                    .offset(x: 8, y: -8)
+                                                }
+                                            }
+                                        }
+                                        .padding(.vertical, 8)
+                                    }
+                                }
+                                .padding(12)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
+                            }
+
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    submitTicket()
+                                }) {
+                                    if isSubmitting {
+                                        ProgressView()
+                                            .tint(.white)
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                    } else {
+                                        Text("Submit Ticket")
+                                            .foregroundColor(.white)
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                    }
+                                }
+                                .background(
+                                    LinearGradient(colors: [Color.purple.opacity(0.8), Color.purple], startPoint: .leading, endPoint: .trailing)
+                                )
+                                .cornerRadius(12)
+                                .disabled(isSubmitting || subject.trimmingCharacters(in: .whitespaces).isEmpty || descriptionText.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                                Button(action: { dismiss() }) {
+                                    Text("Cancel")
+                                        .foregroundColor(.primary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(Color.gray.opacity(0.4), lineWidth: 1)
+                                                .background(Color(UIColor.systemBackground).cornerRadius(12))
+                                        )
+                                }
+                            }
+
+                            if !errorMessage.isEmpty {
+                                Text(errorMessage)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.red)
+                                    .padding()
+                                    .background(Color.red.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+
+                            if !successMessage.isEmpty {
+                                Text(successMessage)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.green)
+                                    .padding()
+                                    .background(Color.green.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
+                        }
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
+                        .padding(.horizontal)
+
+                        Spacer(minLength: 30)
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: languageManager.currentLanguage == .english ? "chevron.left" : "chevron.right")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                }
+            }
+        }
+        .environment(\.layoutDirection, languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight)
+    }
+
+    private func loadPhotos(_ items: [PhotosPickerItem]) {
+        Task {
+            for item in items {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
+                    await MainActor.run {
+                        if !selectedImages.contains(where: { $0.pngData() == data }) {
+                            selectedImages.append(uiImage)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func submitTicket() {
+        guard !subject.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter a subject"
+            return
+        }
+        guard !descriptionText.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "Please enter a description"
+            return
+        }
+
+        isSubmitting = true
+        errorMessage = ""
+        successMessage = ""
+
+        let parameters: [String: Any] = [
+            "subject": subject.trimmingCharacters(in: .whitespaces),
+            "description": descriptionText.trimmingCharacters(in: .whitespaces)
+        ]
+
+        // Use multipart upload if there are images, otherwise regular POST
+        if !selectedImages.isEmpty {
+            ServiceModel.shared.multipartPostRequest(
+                endpoint: WebService.createTicket,
+                parameters: parameters,
+                images: selectedImages
+            ) { result in
+                DispatchQueue.main.async {
+                    isSubmitting = false
+                    handleSubmitResponse(result)
+                }
+            }
+        } else {
+            ServiceModel.shared.postRequest(
+                endpoint: WebService.createTicket,
+                parameters: parameters
+            ) { result in
+                DispatchQueue.main.async {
+                    isSubmitting = false
+                    handleSubmitResponse(result)
+                }
+            }
+        }
+    }
+
+    private func handleSubmitResponse(_ result: Result<Data, AFError>) {
+        switch result {
+        case .success(let data):
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let success = json["success"] as? Bool ?? false
+                    let message = json["message"] as? String ?? "Ticket created successfully"
+
+                    if success {
+                        successMessage = message
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            dismiss()
+                        }
+                    } else {
+                        errorMessage = message
+                    }
+                }
+            } catch {
+                errorMessage = "Failed to process response: \(error.localizedDescription)"
+            }
+
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+            print("❌ API Error:", error.localizedDescription)
+        }
+    }
+}
+
+#Preview {
+    SubmitTicketView()
+        .environmentObject(LanguageManager())
+}

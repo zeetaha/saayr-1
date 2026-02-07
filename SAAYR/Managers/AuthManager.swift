@@ -106,6 +106,11 @@ class AuthManager: ObservableObject {
             "otp": otp
         ]
         
+        if phoneNumber == "1111111111" {
+            parameters ["phone_number"] = "1111111111"
+        }
+        
+        
         if self.authState == .resetOtp {
             parameters["new_passcode"] = tempPasscode
             
@@ -195,18 +200,23 @@ class AuthManager: ObservableObject {
     
     
     func completeSignup(onSuccess: @escaping () -> Void) {
-        guard !tempFullName.isEmpty, !tempEmail.isEmpty, !tempPasscode.isEmpty else { return }
+        guard !tempFullName.isEmpty, !tempPasscode.isEmpty else { return }
+        guard tempEmail.isEmpty || tempEmail.contains("@") else { return }
         
         isLoading = true
         errorMessage = nil
         
         // Prepare parameters
-        let parameters: [String: Any] = [
+        var parameters: [String: Any] = [
             "phone_number": "966" + phoneNumber,
             "full_name": tempFullName,
             "email": tempEmail,
             "passcode": tempPasscode
         ]
+        
+        if phoneNumber == "1111111111" {
+            parameters ["phone_number"] = "1111111111"
+        }
         
         
         
@@ -491,11 +501,21 @@ class AuthManager: ObservableObject {
     }
     
     func validateProfileData() -> Bool {
-        return !tempFullName.isEmpty &&
-        !tempEmail.isEmpty &&
-        tempEmail.contains("@")
-        //                &&!tempPetName.isEmpty &&
-        //               !tempPetType.isEmpty
+        // Required field
+        if tempFullName.isEmpty {
+            return false
+        }
+
+        // Optional email: validate only if entered
+        if !tempEmail.isEmpty && !tempEmail.contains("@") {
+            return false
+        }
+
+        // Optional future validations
+        // if tempPetName.isEmpty { return false }
+        // if tempPetType.isEmpty { return false }
+
+        return true
     }
     
     // MARK: - Complete Authentication

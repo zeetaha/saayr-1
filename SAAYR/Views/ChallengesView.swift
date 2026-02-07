@@ -33,28 +33,32 @@ struct ChallengesView: View {
                     .padding(.horizontal)
                     .padding(.top, 24)
                     
-                    // Daily Challenges
-                    ChallengeSection(
-                        title: languageManager.text("challenges.daily"),
-                        resetInfo: "Resets in 18 hours",
-                        challenges: challenges.filter { $0.type == .daily },
-                        onClaim: { challenge in
-                            selectedChallenge = challenge
-                            showClaimDialog = true
-                        }
-                    )
+                    Text(languageManager.text("No Records Available"))
+                        .foregroundColor(.black.opacity(0.8))
+                        .font(.system(size: 14))
                     
-                    // Weekly Challenges
-                    ChallengeSection(
-                        title: languageManager.text("challenges.weekly"),
-                        resetInfo: "Resets in 5 days",
-                        challenges: challenges.filter { $0.type == .weekly },
-                        onClaim: { challenge in
-                            selectedChallenge = challenge
-                            showClaimDialog = true
-                        }
-                    )
-                    
+//                    // Daily Challenges
+//                    ChallengeSection(
+//                        title: languageManager.text("challenges.daily"),
+//                        resetInfo: "Resets in 18 hours",
+//                        challenges: challenges.filter { $0.type == .daily },
+//                        onClaim: { challenge in
+//                            selectedChallenge = challenge
+//                            showClaimDialog = true
+//                        }
+//                    )
+//                    
+//                    // Weekly Challenges
+//                    ChallengeSection(
+//                        title: languageManager.text("challenges.weekly"),
+//                        resetInfo: "Resets in 5 days",
+//                        challenges: challenges.filter { $0.type == .weekly },
+//                        onClaim: { challenge in
+//                            selectedChallenge = challenge
+//                            showClaimDialog = true
+//                        }
+//                    )
+//                    
                     Spacer(minLength: 100)
                 }
             }
