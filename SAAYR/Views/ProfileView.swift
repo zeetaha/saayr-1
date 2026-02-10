@@ -108,14 +108,14 @@ struct ProfileView: View {
                     .padding(.horizontal)
                     
                     VStack(spacing: 12) {
-                        ProfileMenuItem(
-                            icon: "person.3.fill",
-                            label: "My Groups",
-                            gradient: [Color(hex: "#A855F7"), Color(hex: "#8B5CF6")]
-                        )
-                        {
-                            showGroups = true
-                            }
+//                        ProfileMenuItem(
+//                            icon: "person.3.fill",
+//                            label: "My Groups",
+//                            gradient: [Color(hex: "#A855F7"), Color(hex: "#8B5CF6")]
+//                        )
+//                        {
+//                            showGroups = true
+//                            }
 
                         ProfileMenuItem(
                             icon: "questionmark.circle.fill",

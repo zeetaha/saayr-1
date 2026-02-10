@@ -155,6 +155,7 @@ struct SupportView: View {
 struct Ticket: Identifiable, Hashable {
     let id: String
     let title: String
+    let desc: String
     let message: String
     let timeAgo: String
     let status: TicketStatus
@@ -201,6 +202,13 @@ struct MessageItem: Identifiable {
     let text: String
     let isUser: Bool
     let time: String
+    let images: [String]
+    init(text: String, isUser: Bool, time: String, images: [String] = []) {
+        self.text = text
+        self.isUser = isUser
+        self.time = time
+        self.images = images
+    }
 }
 
 

@@ -1,4 +1,6 @@
 import SwiftUI
+import AppTrackingTransparency
+import AdSupport
 
 
 struct OnboardingSlide: Identifiable {
@@ -17,6 +19,8 @@ struct OnboardingView: View {
     @EnvironmentObject var languageManager: LanguageManager
 
     @State private var currentPage = 0
+
+    @State private var didAskTracking = false
 
     var isRTL: Bool {
         languageManager.currentLanguage == .arabic
@@ -159,7 +163,9 @@ struct OnboardingView: View {
 
                     Button {
                         if currentPage == slides.count - 1 {
-                            authManager.completeOnboarding()
+                            requestTrackingPermissionIfNeeded {
+                                        authManager.completeOnboarding()
+                            }
                         } else {
                             withAnimation {
                                 currentPage += 1
@@ -192,8 +198,41 @@ struct OnboardingView: View {
                 }
                 .padding(32)
             }
+        
         }
     }
+    
+    private func requestTrackingPermissionIfNeeded(completion: @escaping () -> Void) {
+        guard !didAskTracking else {
+            completion()
+            return
+        }
+
+        if #available(iOS 14, *) {
+            ATTrackingManager.requestTrackingAuthorization { status in
+                DispatchQueue.main.async {
+                    didAskTracking = true
+                    completion()
+
+                    switch status {
+                    case .authorized:
+                        print("Tracking authorized")
+                    case .denied:
+                        print("Tracking denied")
+                    case .restricted:
+                        print("Tracking restricted")
+                    case .notDetermined:
+                        print("Not determined")
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+        } else {
+            completion()
+        }
+    }
+
 }
 
 struct OnboardingSlideView: View {

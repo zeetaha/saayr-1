@@ -111,7 +111,7 @@ class ServiceModel {
                     }
                 }
             }
-        }, to: endpoint, headers: getHeader())
+        }, to: endpoint, headers: getHeader(forMultipart: true))
             .validate()
             .responseData { response in
                 switch response.result {
@@ -122,13 +122,75 @@ class ServiceModel {
                 }
             }
     }
+
+    // MARK: - Upload Single Image (returns image_url string from server)
+    func uploadImage(endpoint: String, image: UIImage, completion: @escaping (Result<String, AFError>) -> Void) {
+        // Resize & compress before uploading to avoid large payload (HTTP 413)
+        let maxDimension: CGFloat = 1280
+        let resized = resizeImage(image: image, maxDimension: maxDimension)
+        let compressionQuality: CGFloat = 0.6
+        guard let jpegData = resized.jpegData(compressionQuality: compressionQuality) else {
+            completion(.failure(AFError.parameterEncodingFailed(reason: .missingURL)))
+            return
+        }
+
+        AF.upload(multipartFormData: { multipartFormData in
+            multipartFormData.append(jpegData, withName: "file", fileName: "image.jpg", mimeType: "image/jpeg")
+        }, to: endpoint, headers: getHeader(forMultipart: true))
+        .validate()
+        .responseData { response in
+            switch response.result {
+            case .success(let data):
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let dataDict = json["data"] as? [String: Any],
+                       let imageUrl = dataDict["image_url"] as? String {
+                        completion(.success(imageUrl))
+                    } else {
+                        completion(.failure(AFError.responseSerializationFailed(reason: .decodingFailed(error: NSError(domain: "ServiceModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid upload response"])))))
+                    }
+                } catch {
+                    completion(.failure(AFError.responseSerializationFailed(reason: .decodingFailed(error: error))))
+                }
+            case .failure(let error):
+                // If payload too large, suggest client-side compression further
+                if let code = response.response?.statusCode, code == 413 {
+                    completion(.failure(AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: code))))
+                } else {
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    // Resize image preserving aspect ratio
+    private func resizeImage(image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let aspect = size.width / size.height
+        var newSize: CGSize
+        if size.width > size.height {
+            if size.width <= maxDimension { return image }
+            newSize = CGSize(width: maxDimension, height: maxDimension / aspect)
+        } else {
+            if size.height <= maxDimension { return image }
+            newSize = CGSize(width: maxDimension * aspect, height: maxDimension)
+        }
+
+        UIGraphicsBeginImageContextWithOptions(newSize, false, 0.8)
+        image.draw(in: CGRect(origin: .zero, size: newSize))
+        let newImage = UIGraphicsGetImageFromCurrentImageContext() ?? image
+        UIGraphicsEndImageContext()
+        return newImage
+    }
     
-    func getHeader()-> HTTPHeaders{
+    func getHeader(forMultipart: Bool = false)-> HTTPHeaders{
         var headers: HTTPHeaders = [
-                "Content-Type": "application/json", // or "application/x-www-form-urlencoded" depending on your needs
                 "Cache-Control": "no-cache",
                 "accept": "application/json"
             ]
+        if !forMultipart {
+            headers["Content-Type"] = "application/json"
+        }
             
             // Add Authorization if needed
         if let token = UserModel.shared.user?.accessToken {

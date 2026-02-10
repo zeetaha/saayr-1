@@ -23,15 +23,61 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "BB335436-27EE-4D6E-B569-47C9ECD8229E"
+            uuid = "BF201F2F-7D00-4B76-82C5-9F573199D681"
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SAAYR/Views/SubmitTicketView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "246"
-            endingLineNumber = "246"
+            startingLineNumber = "237"
+            endingLineNumber = "237"
+            landmarkName = "submitTicket()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "BF201F2F-7D00-4B76-82C5-9F573199D681 - 2e809ab0dce8f995"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Saayr.SubmitTicketView.submitTicket() -&gt; ()"
+                  moduleName = "Saayr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/SubmitTicketView.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "237"
+                  endingLineNumber = "237">
+               </Location>
+               <Location
+                  uuid = "BF201F2F-7D00-4B76-82C5-9F573199D681 - 2a49419d6cc327a4"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "closure #1 (Swift.Result&lt;Swift.String, Alamofire.AFError&gt;) -&gt; () in Saayr.SubmitTicketView.submitTicket() -&gt; ()"
+                  moduleName = "Saayr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/SubmitTicketView.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "231"
+                  endingLineNumber = "231">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "9554939B-4DC0-48F9-88BC-525A7D273980"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/SubmitTicketView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "240"
+            endingLineNumber = "240"
             landmarkName = "submitTicket()"
             landmarkType = "7">
          </BreakpointContent>
@@ -39,17 +85,79 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "1ED77054-8E3D-4048-8EFE-180339E643BF"
+            uuid = "386A2DA1-D0A6-4E2C-AF9A-C57C44A512D7"
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SAAYR/Views/SubmitTicketView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "248"
-            endingLineNumber = "248"
+            startingLineNumber = "243"
+            endingLineNumber = "243"
             landmarkName = "submitTicket()"
             landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "08868A1A-67A8-41B1-83DF-6CDB576E8773"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/SubmitTicketView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "263"
+            endingLineNumber = "263"
+            landmarkName = "submitTicket()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "F88D9360-5A2D-444F-9413-B1442BCBEB24"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/SubmitTicketView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "260"
+            endingLineNumber = "260"
+            landmarkName = "submitTicket()"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "F88D9360-5A2D-444F-9413-B1442BCBEB24 - ac42a063beb569ed"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "closure #2 () -&gt; () in Saayr.SubmitTicketView.submitTicket() -&gt; ()"
+                  moduleName = "Saayr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/SubmitTicketView.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "260"
+                  endingLineNumber = "260">
+               </Location>
+               <Location
+                  uuid = "F88D9360-5A2D-444F-9413-B1442BCBEB24 - e5fffd7ee410266f"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "closure #1 (Swift.Result&lt;Foundation.Data, Alamofire.AFError&gt;) -&gt; () in closure #2 () -&gt; () in Saayr.SubmitTicketView.submitTicket() -&gt; ()"
+                  moduleName = "Saayr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/SubmitTicketView.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "261"
+                  endingLineNumber = "261">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

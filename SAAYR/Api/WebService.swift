@@ -29,6 +29,7 @@ class WebService {
     static var updateProfile = baseUrl + "user/profile"
     static var deleteAccount = baseUrl + "user/account"
     static var createTicket = baseUrl + "tickets/create"
+    static var uploadImage = baseUrl + "tickets/upload-image"
     static var myTickets = baseUrl + "tickets/my-tickets"
    
     

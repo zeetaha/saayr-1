@@ -5,7 +5,9 @@
 //  Created by Awais Raza on 08/02/2026.
 //
 
+
 import SwiftUI
+import Kingfisher
 
 
 struct TicketDetailView: View {
@@ -17,6 +19,10 @@ struct TicketDetailView: View {
     @State private var inputText = ""
     @State private var isLoading: Bool = false
     @State private var headerTime: String
+    @State private var ticketImages: [String] = []
+    @State private var selectedImageURL: URL?
+    @State private var showingFullImage: Bool = false
+    @State private var pollingTask: Task<Void, Never>? = nil
     
 
     init(ticket: Ticket) {
@@ -59,7 +65,13 @@ struct TicketDetailView: View {
                 }
             }
         }
-        .onAppear { fetchTicketDetails() }
+        .onAppear {
+            fetchTicketDetails()
+            startPolling()
+        }
+        .onDisappear {
+            stopPolling()
+        }
         .environment(
             \.layoutDirection,
             languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight
@@ -93,6 +105,36 @@ struct TicketDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(ticket.title)
                 .font(.system(size: 20, weight: .bold))
+            
+            Text(ticket.desc)
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+
+            // Ticket images
+            if !ticketImages.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ticketImages, id: \.self) { img in
+                            if let url = fullImageUrl(from: img) {
+                                KFImage.url(url)
+                                    .placeholder {
+                                        ProgressView()
+                                            .frame(width: 120, height: 80)
+                                    }
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 120, height: 80)
+                                    .clipped()
+                                    .cornerRadius(8)
+                                    .onTapGesture {
+                                        selectedImageURL = url
+                                        showingFullImage = true
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
 
             Text("Created: \(headerTime)")
                 .font(.system(size: 14))
@@ -103,6 +145,11 @@ struct TicketDetailView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color(UIColor.systemBackground))
         )
+        .sheet(isPresented: $showingFullImage) {
+            if let url = selectedImageURL {
+                FullScreenImageView(url: url)
+            }
+        }
     }
 
     private var inputBar: some View {
@@ -238,6 +285,17 @@ struct TicketDetailView: View {
                                 }
                             
 
+                            // Top-level ticket images
+                            if let imagesArray = json["images"] as? [[String: Any]] {
+                                var topImgs: [String] = []
+                                for i in imagesArray {
+                                    if let url = i["image_url"] as? String {
+                                        topImgs.append(url)
+                                    }
+                                }
+                                ticketImages = topImgs
+                            }
+
                             if let messagesArray = json["messages"] as? [[String: Any]] {
                                 var loaded: [MessageItem] = []
 
@@ -259,8 +317,18 @@ struct TicketDetailView: View {
                                         timeText = formatMessageTime(createdAt)
                                     }
 
-                                    // 4️⃣ Append to array
-                                    loaded.append(MessageItem(text: text, isUser: isUser, time: timeText))
+                                    // 4️⃣ Extract message images if any
+                                    var msgImgs: [String] = []
+                                    if let imgs = m["images"] as? [[String: Any]] {
+                                        for im in imgs {
+                                            if let url = im["image_url"] as? String {
+                                                msgImgs.append(url)
+                                            }
+                                        }
+                                    }
+
+                                    // 5️⃣ Append to array
+                                    loaded.append(MessageItem(text: text, isUser: isUser, time: timeText, images: msgImgs))
                                 }
 
                                 messages = loaded
@@ -276,6 +344,32 @@ struct TicketDetailView: View {
             }
         }
     }
+
+    // Start polling ticket details periodically (every 5 seconds)
+    private func startPolling(intervalSeconds: UInt64 = 30) {
+        stopPolling()
+        pollingTask = Task {
+            let nanos = intervalSeconds * 1_000_000_000
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: nanos)
+                } catch {
+                    break
+                }
+
+                if Task.isCancelled { break }
+
+                await MainActor.run {
+                    fetchTicketDetails()
+                }
+            }
+        }
+    }
+
+    private func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
 }
 
 
@@ -284,7 +378,7 @@ struct TicketDetailView: View {
     TicketDetailView(
         ticket: Ticket(
             id: "1",
-            title: "Check-in Issue",
+            title: "Check-in Issue", desc: "description",
             message: "I couldn't check in at the venue.",
             timeAgo: "10 min ago",
             status: .open

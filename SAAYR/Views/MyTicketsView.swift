@@ -164,7 +164,7 @@ struct MyTicketsView: View {
                                 else if statusStr.contains("progress") || statusStr.contains("in_progress") { status = .inProgress }
                                 else { status = .open }
 
-                                let ticket = Ticket(id: idStr, title: subject, message: description, timeAgo: timeStr, status: status)
+                                let ticket = Ticket(id: idStr, title: subject, desc: description, message: description, timeAgo: timeStr, status: status)
                                 loaded.append(ticket)
                             }
                             tickets = loaded

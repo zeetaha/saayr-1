@@ -228,14 +228,40 @@ struct SubmitTicketView: View {
 
         // Use multipart upload if there are images, otherwise regular POST
         if !selectedImages.isEmpty {
-            ServiceModel.shared.multipartPostRequest(
-                endpoint: WebService.createTicket,
-                parameters: parameters,
-                images: selectedImages
-            ) { result in
-                DispatchQueue.main.async {
+            var uploadedUrls: [String] = []
+            var uploadErrorMessage: String? = nil
+            let group = DispatchGroup()
+
+            for image in selectedImages {
+                group.enter()
+                ServiceModel.shared.uploadImage(endpoint: WebService.uploadImage, image: image) { result in
+                    switch result {
+                    case .success(let imageUrl):
+                        uploadedUrls.append(imageUrl)
+                    case .failure(let error):
+                        if uploadErrorMessage == nil {
+                            uploadErrorMessage = error.localizedDescription
+                        }
+                    }
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                if let errMsg = uploadErrorMessage {
                     isSubmitting = false
-                    handleSubmitResponse(result)
+                    errorMessage = "Image upload failed: \(errMsg)"
+                    return
+                }
+
+                var paramsWithImages = parameters
+                paramsWithImages["image_urls"] = uploadedUrls
+
+                ServiceModel.shared.postRequest(endpoint: WebService.createTicket, parameters: paramsWithImages) { result in
+                    DispatchQueue.main.async {
+                        isSubmitting = false
+                        handleSubmitResponse(result)
+                    }
                 }
             }
         } else {
