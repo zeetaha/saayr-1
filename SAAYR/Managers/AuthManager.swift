@@ -425,19 +425,15 @@ class AuthManager: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        // Simulate API call to create profile
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.isLoading = false
-            
-            // Save profile data
-            UserDefaults.standard.set(self?.tempFullName, forKey: "fullName")
-            UserDefaults.standard.set(self?.tempEmail, forKey: "email")
-            //            UserDefaults.standard.set(self?.tempPetName, forKey: "petName")
-            //            UserDefaults.standard.set(self?.tempPetType, forKey: "petType")
-            UserDefaults.standard.set(true, forKey: "hasProfile")
-            
+        // Save profile data
+        UserDefaults.standard.set(tempFullName, forKey: "fullName")
+        UserDefaults.standard.set(tempEmail, forKey: "email")
+        UserDefaults.standard.set(true, forKey: "hasProfile")
+        
+        DispatchQueue.main.async {
+            self.isLoading = false
             // Complete authentication
-            self?.sendPinFlow()
+            self.sendPinFlow()
         }
     }
     

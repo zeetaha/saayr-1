@@ -58,4 +58,5 @@ struct LeaderboardResponse: Decodable {
     let my_rank: Int
     let my_points: Int
     let leaderboard: [LeaderboardEntry]
+    let total: Int?
 }

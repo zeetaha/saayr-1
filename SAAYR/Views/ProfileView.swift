@@ -83,9 +83,9 @@ struct ProfileView: View {
                             
                             // MARK: Stats
                             HStack(spacing: 12) {
-                                StatCardProfile(icon: "mappin", value: "12", label: "Check-ins")
-                                StatCardProfile(icon: "bolt.fill", value: "5", label: "Battles")
-                                StatCardProfile(icon: "gift.fill", value: "3", label: "Rewards")
+                                StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInCount)", label: "Check-ins")
+                                StatCardProfile(icon: "bolt.fill", value: "0", label: "Battles")
+                                StatCardProfile(icon: "gift.fill", value: "\(0)", label: "Rewards")
                             }
                         }
                         .padding()
@@ -275,8 +275,8 @@ struct ProfileHeaderCard: View {
                             .foregroundColor(.white)
                         
                         HStack(spacing: 8) {
-                            Badge(icon: "star.fill", text: "Level 2")
-                            Badge(icon: "sparkles", text: "1000 XP")
+                            Badge(icon: "star.fill", text: "Level \(user.level)")
+                            Badge(icon: "sparkles", text: "\(user.points) XP")
                         }
                     }
                     Spacer()

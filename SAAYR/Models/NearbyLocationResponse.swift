@@ -23,6 +23,7 @@ struct NearbyLocationResponse: Identifiable, Sendable {
     let category: String
     let image_url: String?
     let can_checkin: Bool
+    let is_partner: Bool
 }
 
 

@@ -183,6 +183,73 @@ class ServiceModel {
         return newImage
     }
     
+    // MARK: - Fetch Rewards Catalog
+    func fetchRewards(page: Int, pageSize: Int, completion: @escaping (Result<[APIReward], Error>) -> Void) {
+        let parameters: [String: Any] = [
+            "page": page,
+            "page_size": pageSize
+        ]
+        
+        getRequest(endpoint: WebService.rewardsCatalog, parameters: parameters) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(RewardsCatalogResponse.self, from: data)
+                    completion(.success(response.rewards))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // MARK: - Redeem Reward
+    func redeemReward(rewardId: Int, completion: @escaping (Result<RedeemResponse, Error>) -> Void) {
+        let parameters: [String: Any] = [
+            "reward_id": rewardId
+        ]
+        
+        AF.request(
+            WebService.redeemReward,
+            method: .post,
+            parameters: parameters,
+            encoding: JSONEncoding.default,
+            headers: getHeader()
+        )
+        .responseData { response in
+            print("Redeem Response Status: \(response.response?.statusCode ?? -1)")
+            
+            switch response.result {
+            case .success(let data):
+                do {
+                    let jsonString = String(data: data, encoding: .utf8) ?? ""
+                    print("Redeem Response Data: \(jsonString)")
+                    
+                    let decodedResponse = try JSONDecoder().decode(RedeemResponse.self, from: data)
+                    completion(.success(decodedResponse))
+                } catch {
+                    print("Redeem Decode Error: \(error)")
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let detail = json["detail"] as? String {
+                        let error = NSError(domain: "RedeemError", code: -1, userInfo: [NSLocalizedDescriptionKey: detail])
+                        completion(.failure(error))
+                    } else {
+                        completion(.failure(error))
+                    }
+                }
+            case .failure(let error):
+                print("Redeem Request Error: \(error)")
+                if let data = response.data {
+                    let jsonString = String(data: data, encoding: .utf8) ?? ""
+                    print("Error Response: \(jsonString)")
+                }
+                completion(.failure(error))
+            }
+        }
+    }
+
     func getHeader(forMultipart: Bool = false)-> HTTPHeaders{
         var headers: HTTPHeaders = [
                 "Cache-Control": "no-cache",

@@ -137,7 +137,11 @@ struct HomeView: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.black)
                 Spacer()
-                TextButton(title: languageManager.currentLanguage == .english ? "View All" : "عرض الكل") {}
+                NavigationLink(destination: LeaderboardFullView()) {
+                    Text(languageManager.currentLanguage == .english ? "View All" : "عرض الكل")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.blue)
+                }
             }
             
             Text("Riyadh")

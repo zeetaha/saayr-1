@@ -91,12 +91,18 @@ struct PhoneAuthView: View {
                                 .fontWeight(.bold)
                                 .foregroundColor(Color(hex: "#3B82F6"))
                             
-                            TextField("05X XXX XXXX", text: $authManager.phoneNumber)
+                            // using custom placeholder modifier so we can control its color
+                            TextField("", text: $authManager.phoneNumber)
                                 .keyboardType(.numberPad)
                                 .focused($isPhoneFocused)
+                                .foregroundColor(.black) // visible in both modes
+                                .placeholder(when: authManager.phoneNumber.isEmpty) {
+                                    Text("05X XXX XXX")
+                                        .foregroundColor(.gray)
+                                }
                                 .onChange(of: authManager.phoneNumber) { value in
                                     let filtered = value.filter { $0.isNumber }
-                                    authManager.phoneNumber = String(filtered.prefix(10))
+                                    authManager.phoneNumber = String(filtered.prefix(9))
                                 }
                         }
                         .padding()
@@ -126,8 +132,8 @@ struct PhoneAuthView: View {
                         .background(Color(hex: "#3B82F6"))
                         .foregroundColor(.white)
                         .cornerRadius(16)
-                        .disabled(authManager.phoneNumber.count < 10 || authManager.isLoading)
-                        .opacity(authManager.phoneNumber.count < 10 ? 0.6 : 1)
+                        .disabled(authManager.phoneNumber.count < 9 || authManager.isLoading)
+                        .opacity(authManager.phoneNumber.count < 9 ? 0.6 : 1)
                     }
                     .padding(24)
                     .background(Color.white.opacity(0.9))

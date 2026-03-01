@@ -126,20 +126,32 @@ struct ProfileSetupView: View {
                         authManager.tempEmail = email
                         authManager.completeProfileSetup()
                     }) {
-                        HStack {
-                            Text(languageManager.currentLanguage == .english ? "Continue" : "متابعة")
-                                .font(.system(size: 18, weight: .bold))
-                            Image(systemName: "arrow.forward")
+                        Group {
+                            if authManager.isLoading {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .tint(Color(hex: "#3B82F6"))
+                                    Text(languageManager.currentLanguage == .english ? "Setting up..." : "جاري الإعداد...")
+                                        .font(.system(size: 18, weight: .bold))
+                                }
+                                .foregroundColor(Color(hex: "#3B82F6"))
+                            } else {
+                                HStack {
+                                    Text(languageManager.currentLanguage == .english ? "Continue" : "متابعة")
+                                        .font(.system(size: 18, weight: .bold))
+                                    Image(systemName: "arrow.forward")
+                                }
+                                .foregroundColor(Color(hex: "#3B82F6"))
+                            }
                         }
-                        .foregroundColor(Color(hex: "#3B82F6"))
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
                         .background(Color.white)
                         .cornerRadius(16)
                     }
                     .padding(.horizontal, 32)
-                    .disabled(fullName.count < 2)
-                    .opacity(fullName.count < 2 ? 0.6 : 1.0)
+                    .disabled(fullName.count < 2 || authManager.isLoading)
+                    .opacity(fullName.count < 2 || authManager.isLoading ? 0.6 : 1.0)
                     
                     Spacer(minLength: 40)
                 }

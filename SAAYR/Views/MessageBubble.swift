@@ -24,7 +24,7 @@ struct MessageBubble: View {
                     // Text message
                     if !msg.text.isEmpty {
                         Text(msg.text)
-                            .foregroundColor(msg.isUser ? .primary : .white)
+                            .foregroundColor(msg.isUser ? .black : .white)
                             .multilineTextAlignment(msg.isUser ? .trailing : .leading)
                     }
 
@@ -79,17 +79,9 @@ struct MessageBubble: View {
     @ViewBuilder
     private var bubbleBackground: some View {
         if msg.isUser {
-            LinearGradient(
-                colors: [Color.white.opacity(0.9), Color.white],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Color.white.opacity(0.9)
         } else {
-            LinearGradient(
-                colors: [Color.purple.opacity(0.9), Color.purple],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Color.blue.opacity(0.8)
         }
     }
 

@@ -113,6 +113,7 @@ struct MapView: View {
     @State private var selectedLocation: NearbyLocationResponse?
     
     @State private var lastFetchCenter: CLLocationCoordinate2D?
+    @State private var trackingMode: MapUserTrackingMode = .follow
     
     var equatableCenter: MapCenter {
         MapCenter(
@@ -144,6 +145,9 @@ struct MapView: View {
             // MARK: Map
             Map(
                 coordinateRegion: $region,
+                interactionModes: .all,
+                showsUserLocation: true,
+                userTrackingMode: $trackingMode,
                 annotationItems: locations
             ) { item in
                 MapAnnotation(coordinate: item.coordinate) {
@@ -157,7 +161,8 @@ struct MapView: View {
                             can_checkin: item.can_checkin
                         ),
                         isInRange: true,
-                        isActive: selectedLocation?.id == item.id
+                        isActive: selectedLocation?.id == item.id,
+                        isPartner: item.is_partner
                     )
                     .onTapGesture {
                         selectedLocation = item
@@ -426,14 +431,19 @@ struct MerchantMarkerView: View {
     let merchant: MerchantLocation
     let isInRange: Bool
     let isActive: Bool
+    let isPartner: Bool
     
     @State private var pulse = false
+    
+    var markerColor: Color {
+        isPartner ? .purple : .green
+    }
     
     var body: some View {
         ZStack {
             if isInRange && !isActive {
                 Circle()
-                    .fill(Color.green.opacity(0.3))
+                    .fill(markerColor.opacity(0.3))
                     .frame(width: 60, height: 60)
                     .scaleEffect(pulse ? 1.6 : 1)
                     .opacity(pulse ? 0 : 0.6)
@@ -444,11 +454,11 @@ struct MerchantMarkerView: View {
             }
             
             RoundedRectangle(cornerRadius: 14)
-                .fill(isActive ? Color.green : .white)
+                .fill(isActive ? markerColor : .white)
                 .frame(width: 48, height: 48)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
-                        .stroke(isInRange ? Color.green : Color.gray, lineWidth: 3)
+                        .stroke(isInRange ? markerColor : Color.gray, lineWidth: 3)
                 )
                 .shadow(radius: 6)
             

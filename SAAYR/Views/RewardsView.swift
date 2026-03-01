@@ -4,9 +4,14 @@ struct RewardsView: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
     
-    @State private var rewards: [Reward] = getDemoRewards()
+    @State private var rewards: [APIReward] = []
     @State private var showRedeemDialog = false
-    @State private var selectedReward: Reward?
+    @State private var selectedReward: APIReward?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var showError = false
+    @State private var redemptionData: RedemptionData?
+    @State private var showSuccess = false
     
     var body: some View {
         ZStack {
@@ -22,260 +27,303 @@ struct RewardsView: View {
                 VStack(spacing: 24) {
                     
                     // Header
-//                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text(languageManager.text("rewards.title"))
-                            .font(.system(size: 32, weight: .bold))
-                            .foregroundColor(.black)
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundColor(Color(hex: "#FF8C00"))
                         
-                        Text(languageManager.text("rewards.subtitle"))
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                        
-//                        // XP Balance Card
-//                        RoundedRectangle(cornerRadius: 20)
-//                            .fill(Color.blue)
-//                            .frame(height: 100)
-//                            .overlay(
-//                                HStack {
-//                                    VStack(alignment: .leading, spacing: 4) {
-//                                        Text(languageManager.text("rewards.yourXP"))
-//                                            .foregroundColor(.white.opacity(0.8))
-//                                            .font(.system(size: 14))
-//                                        
-//                                        Text("\(userManager.userData.totalXP)")
-//                                            .font(.system(size: 32, weight: .bold))
-//                                            .foregroundColor(.white)
-//                                    }
-//                                    Spacer()
-//                                    Image(systemName: "star.fill")
-//                                        .resizable()
-//                                        .frame(width: 48, height: 48)
-//                                        .foregroundColor(.white)
-//                                }
-//                                .padding()
-//                            )
-//                    }
-//                    .padding(.horizontal)
-//                    .padding(.top, 24)
-                    Text(languageManager.text("No Records Available"))
-                        .foregroundColor(.black.opacity(0.8))
-                        .font(.system(size: 14))
-                    // Rewards List
-//                    VStack(spacing: 16) {
-//                        ForEach(rewards) { reward in
-//                            RewardCard(reward: reward) { selected in
-//                                selectedReward = selected
-//                                showRedeemDialog = true
-//                            }
-//                        }
-//                    }
-//                    .padding(.horizontal)
+                        // XP Balance Card
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 24)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color(hex: "#FFA500"), Color(hex: "#FF8C00")]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(height: 140)
+                            
+                            HStack {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(languageManager.text("rewards.yourXP"))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .font(.system(size: 16))
+                                    
+                                    Text("\(userManager.userData.totalXP)")
+                                        .font(.system(size: 48, weight: .bold))
+                                        .foregroundColor(.white)
+                                }
+                                Spacer()
+                                Text("💎")
+                                    .font(.system(size: 64))
+                            }
+                            .padding(.horizontal, 24)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 24)
+                    
+                    HStack(alignment: .center, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(hex: "#FF8C00"))
+                            .frame(width: 4, height: 24)
+
+                        Text(languageManager.text("Available Rewards"))
+                            .foregroundColor(.black.opacity(0.8))
+                            .font(.system(size: 20, weight: .bold))
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    
+                    // Loading or Rewards List
+                    if isLoading {
+                        ProgressView()
+                            .frame(height: 100)
+                    } else {
+                        VStack(spacing: 16) {
+                            ForEach(rewards) { reward in
+                                RewardCard(reward: reward, userXP: userManager.userData.totalXP) { selected in
+                                    selectedReward = selected
+                                    showRedeemDialog = true
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
                 }
             }
         }
-        .alert(isPresented: $showRedeemDialog) {
-            guard let reward = selectedReward else {
-                return Alert(title: Text("Error"))
+        .alert(
+            "Redeem Reward",
+            isPresented: .constant(selectedReward != nil),
+            presenting: selectedReward
+        ) { reward in
+            Button("Redeem") {
+                redeemReward(rewardId: reward.id)
             }
-            
-            return Alert(
-                title: Text("Redeem Reward"),
-                message: Text("Are you sure you want to redeem \(reward.title) for \(reward.xpRequired) XP?"),
-                primaryButton: .default(Text("Redeem"), action: {
-                    if let index = rewards.firstIndex(where: { $0.id == reward.id }) {
-                        rewards[index].isRedeemed = true
-                        userManager.userData.totalXP -= reward.xpRequired
-                    }
-                }),
-                secondaryButton: .cancel()
+            Button("Cancel", role: .cancel) {
+                selectedReward = nil
+            }
+        } message: { reward in
+            Text("Are you sure you want to redeem \(reward.title) for \(reward.xp_cost) XP?")
+        }
+        .alert(isPresented: $showError) {
+            Alert(
+                title: Text("Error"),
+                message: Text(errorMessage ?? "An error occurred"),
+                dismissButton: .default(Text("OK"))
             )
+        }
+        .alert(isPresented: $showSuccess) {
+            Alert(
+                title: Text("Success"),
+                message: Text("Redemption Code: \(redemptionData?.code ?? "")\n\nKeep this code for your records."),
+                dismissButton: .default(Text("OK")) {
+                    redemptionData = nil
+                    selectedReward = nil
+                }
+            )
+        }
+        .onAppear() {
+            userManager.fetchAllUserData()
+            fetchRewards()
+        }
+    }
+    
+    private func fetchRewards() {
+        isLoading = true
+        ServiceModel.shared.fetchRewards(page: 1, pageSize: 20) { result in
+            DispatchQueue.main.async {
+                isLoading = false
+                switch result {
+                case .success(let fetchedRewards):
+                    self.rewards = fetchedRewards
+                case .failure(let error):
+                    self.errorMessage = "Failed to load rewards: \(error.localizedDescription)"
+                    self.showError = true
+                }
+            }
+        }
+    }
+    
+    private func redeemReward(rewardId: Int) {
+        ServiceModel.shared.redeemReward(rewardId: rewardId) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    // Show redemption code to user
+                    self.redemptionData = response.data
+                    self.showSuccess = true
+                    // Refresh user data and rewards in background
+                    userManager.fetchAllUserData()
+                    fetchRewards()
+                    selectedReward = nil
+                case .failure(let error):
+                    if let reward = selectedReward {
+                        let userXP = userManager.userData.totalXP
+                        let neededXP = reward.xp_cost
+                        
+                        self.errorMessage = "Not enough XP. You have \(userXP) XP, need \(neededXP)."
+                    } else {
+                        self.errorMessage = error.localizedDescription
+                    }
+                    
+                    self.showError = true
+                    selectedReward = nil
+                }
+            }
         }
     }
 }
 
 // MARK: Reward Card
 struct RewardCard: View {
-    var reward: Reward
-    var onRedeem: (Reward) -> Void
-    
-    @EnvironmentObject var userManager: UserManager
+    var reward: APIReward
+    var userXP: Int
+    var onRedeem: (APIReward) -> Void
+
     @EnvironmentObject var languageManager: LanguageManager
-    
+
     var canAfford: Bool {
-        //userManager.userData.totalXP >= reward.xpRequired
-        3600 >= reward.xpRequired
+        userXP >= reward.xp_cost
     }
-    
+
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                // Reward Icon
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(hex: reward.imageColor))
-                        .frame(width: 60, height: 60)
-                    
-                    Text(reward.imageEmoji)
-                        .font(.system(size: 28))
+        HStack(spacing: 16) {
+            // image
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(0.1))
+                    .frame(width: 80, height: 80)
+
+                if let imageUrl = reward.image_url, let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { img in
+                        img
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 80, height: 80)
+                            .cornerRadius(12)
+                    } placeholder: {
+                        ProgressView()
+                            .frame(width: 80, height: 80)
+                    }
+                } else {
+                    Image(systemName: "gift.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.gray)
                 }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(reward.title)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(reward.isRedeemed ? .gray : .black)
-                    
-                    Text(reward.partner)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(reward.title)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.black)
+
+                if let merchant = reward.merchant_name, !merchant.isEmpty {
+                    Text(merchant)
                         .font(.system(size: 14))
                         .foregroundColor(.gray)
                 }
-                
+
                 Spacer()
-            }
-            
-            HStack {
-                Text("\(reward.xpRequired) XP")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(canAfford ? .blue : .gray)
-                
-                Spacer()
-                
-                Button(action: {
-                    onRedeem(reward)
-                }) {
-                    Text(canAfford ? "Redeem" : "Locked")
+
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 14))
+                    Text("\(reward.xp_cost) XP")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .background(
-                                   ZStack {
-                                       if canAfford {
-                                           LinearGradient(colors: [.green, .teal], startPoint: .leading, endPoint: .trailing)
-                                       } else {
-                                           Color.gray
-                                       }
-                                   }
-                               )
-                        .cornerRadius(12)
+                        .foregroundColor(canAfford ? .blue : .gray)
                 }
-                .disabled(!canAfford || reward.isRedeemed)
             }
+
+            Spacer()
+
+            Button(action: {
+                onRedeem(reward)
+            }) {
+                HStack {
+                    if !canAfford {
+                        Image(systemName: "lock.fill")
+                    }
+                    Text(canAfford ? "Redeem" : "Locked")
+                }
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .background(
+                    ZStack {
+                        if canAfford {
+                            LinearGradient(colors: [.green, .teal], startPoint: .leading, endPoint: .trailing)
+                        } else {
+                            Color.gray
+                        }
+                    }
+                )
+                .cornerRadius(12)
+            }
+            .disabled(!canAfford)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.15))
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(.ultraThinMaterial)
-                )
-        )
+        .background(Color.white)
+        .cornerRadius(20)
+        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 }
 
-// MARK: Reward Model
-struct Reward: Identifiable {
-    let id: String
+// MARK: API Response Model
+struct RewardsCatalogResponse: Codable {
+    let rewards: [APIReward]
+    let total: Int
+    let page: Int
+    let page_size: Int
+    let total_pages: Int
+}
+
+// MARK: API Reward Model
+struct APIReward: Identifiable, Codable {
+    let id: Int
     let title: String
-    let titleAr: String
-    let description: String
-    let descriptionAr: String
-    let xpRequired: Int
-    let partner: String
-    let value: String
-    let imageEmoji: String
-    let imageColor: String
-    var isRedeemed: Bool = false
+    let description: String?
+    let reward_type: String
+    let merchant_name: String?
+    let xp_cost: Int
+    let required_level: Int?
+    let availability_type: String
+    let starts_at: String?
+    let expires_at: String?
+    let stock_type: String
+    let quantity_total: Int?
+    let quantity_remaining: Int?
+    let per_user_limit: Int?
+    let redemption_instructions: String?
+    let image_url: String?
+    let status: String
+    let is_active: Bool
+    let created_at: String
+    let updated_at: String
+}
+
+// MARK: Redeem Response Model
+struct RedeemResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: RedemptionData
+}
+
+// MARK: Redemption Data Model
+struct RedemptionData: Codable {
+    let redemption_id: Int
+    let code: String
+    let instructions: String
 }
 
 // MARK: Dummy Data
-func getDemoRewards() -> [Reward] {
-    return [
-        Reward(
-            id: "1",
-            title: "Amazon Voucher",
-            titleAr: "بطاقة أمازون",
-            description: "25 SAR Amazon gift card",
-            descriptionAr: "25 ريال بطاقة هدايا أمازون",
-            xpRequired: 2500,
-            partner: "Amazon",
-            value: "25 SAR",
-            imageEmoji: "📦",
-            imageColor: "#FF9900"
-        ),
-        Reward(
-            id: "2",
-            title: "Starbucks Voucher",
-            titleAr: "قسيمة ستاربكس",
-            description: "Free grande beverage",
-            descriptionAr: "مشروب مجاني",
-            xpRequired: 3000,
-            partner: "Starbucks",
-            value: "1 Drink",
-            imageEmoji: "☕",
-            imageColor: "#00704A"
-        ),
-        Reward(
-            id: "3",
-            title: "Cinema Ticket",
-            titleAr: "تذكرة سينما",
-            description: "VOX Cinemas ticket",
-            descriptionAr: "تذكرة لمهرجان VOX",
-            xpRequired: 5000,
-            partner: "VOX Cinemas",
-            value: "1 Ticket",
-            imageEmoji: "🎬",
-            imageColor: "#E91E63"
-        ),
-        Reward(
-            id: "4",
-            title: "McDonald's Meal",
-            titleAr: "وجبة ماكدونالدز",
-            description: "Buy 1 Get 1 Free",
-            descriptionAr: "اشترِ واحدة واحصل على الأخرى مجانًا",
-            xpRequired: 3500,
-            partner: "McDonald's",
-            value: "BOGO",
-            imageEmoji: "🍔",
-            imageColor: "#FFC107"
-        ),
-        Reward(
-            id: "5",
-            title: "Noon Voucher",
-            titleAr: "قسيمة نون",
-            description: "75 SAR Noon credit",
-            descriptionAr: "رصيد 75 ريال نون",
-            xpRequired: 7500,
-            partner: "Noon",
-            value: "75 SAR",
-            imageEmoji: "🛍️",
-            imageColor: "#2196F3"
-        ),
-        Reward(
-            id: "6",
-            title: "Jarir Bookstore",
-            titleAr: "مكتبة جرير",
-            description: "100 SAR voucher",
-            descriptionAr: "قسيمة 100 ريال",
-            xpRequired: 10000,
-            partner: "Jarir",
-            value: "100 SAR",
-            imageEmoji: "📚",
-            imageColor: "#9C27B0"
-        ),
-        Reward(
-            id: "7",
-            title: "Extra Stores",
-            titleAr: "متاجر اكسترا",
-            description: "100 SAR voucher",
-            descriptionAr: "قسيمة 100 ريال",
-            xpRequired: 10000,
-            partner: "Extra",
-            value: "100 SAR",
-            imageEmoji: "🏪",
-            imageColor: "#FF5722"
-        )
-    ]
+func getDemoRewards() -> [APIReward] {
+    return []
 }
 
 
