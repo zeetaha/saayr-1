@@ -2,108 +2,6 @@ import SwiftUI
 import MapKit
 import Combine
 
-//struct MapView: View {
-//    @State private var region = MKCoordinateRegion(
-//        center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753),
-//        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-//    )
-//
-//    @State private var merchants: [MerchantLocation] = MerchantLocation.demo()
-//    @State private var selectedMerchant: MerchantLocation?
-//    @State private var isCheckingIn = false
-//    @State private var elapsedTime = 0
-//    @State private var progress: Double = 0
-//
-//    let checkInDuration = 120
-//    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-//
-//    // MARK: Computed
-//    var merchantsWithDistanceArray: [MerchantWithDistance] {
-//        merchants.enumerated().map { index, merchant in
-//            let distance = index < 2 ? 50.0 : Double(index + 1) * 500.0
-//            return MerchantWithDistance(merchant: merchant, distance: distance)
-//        }
-//    }
-//
-//    var body: some View {
-//        ZStack {
-//            // MARK: Map
-//            Map(coordinateRegion: $region, annotationItems: merchantsWithDistanceArray) { item in
-//                MapAnnotation(coordinate: item.merchant.coordinate) {
-//                    MerchantMarkerView(
-//                        merchant: item.merchant,
-//                        isInRange: item.distance <= 100,
-//                        isActive: item.merchant.id == selectedMerchant?.id && isCheckingIn
-//                    )
-//                    .onTapGesture {
-//                        withAnimation {
-//                            selectedMerchant = item.merchant
-//                        }
-//                    }
-//                }
-//            }
-//            .ignoresSafeArea()
-//
-//            // MARK: Top Header
-//            VStack {
-//                HeaderCard(nearbyCount: merchantsWithDistanceArray.filter { $0.distance <= 100 }.count)
-//                Spacer()
-//            }
-//
-//            // MARK: Check-In Progress
-//            if isCheckingIn, let merchant = selectedMerchant {
-//                CheckInProgressCard(
-//                    merchant: merchant,
-//                    progress: progress,
-//                    remaining: checkInDuration - elapsedTime
-//                ) {
-//                    resetCheckIn()
-//                }
-//            }
-//
-//            // MARK: Bottom Check-In CTA
-//            if !isCheckingIn, let merchant = selectedMerchant ?? merchantsWithDistanceArray.first(where: { $0.distance <= 100 })?.merchant {
-//                BottomCheckInCard(merchant: merchant) {
-//                    startCheckIn(merchant)
-//                }
-//            }
-//        }
-//        .onReceive(timer) { _ in
-//            guard isCheckingIn else { return }
-//
-//            elapsedTime += 1
-//            progress = Double(elapsedTime) / Double(checkInDuration)
-//
-//            if elapsedTime >= checkInDuration {
-//                completeCheckIn()
-//            }
-//        }
-//    }
-//
-//    // MARK: Actions
-//    private func startCheckIn(_ merchant: MerchantLocation) {
-//        withAnimation {
-//            selectedMerchant = merchant
-//            isCheckingIn = true
-//            elapsedTime = 0
-//            progress = 0
-//        }
-//    }
-//
-//    private func resetCheckIn() {
-//        withAnimation {
-//            isCheckingIn = false
-//            selectedMerchant = nil
-//            elapsedTime = 0
-//            progress = 0
-//        }
-//    }
-//
-//    private func completeCheckIn() {
-//        resetCheckIn()
-//    }
-//}
-
 struct MapView: View {
     
     @StateObject private var locationManager = LocationManager()
@@ -131,6 +29,7 @@ struct MapView: View {
     
     // MARK: Check-In State
     @State private var isCheckingIn = false
+    @State private var isValidating = false
     @State private var elapsedTime = 0
     @State private var progress: Double = 0
     let checkInDuration = 10   // example 5 sec for demo; can be 120
@@ -256,9 +155,10 @@ struct MapView: View {
             
             
             // MARK: Bottom Check-In
-            if !isCheckingIn, let location = selectedLocation{
+            if !isCheckingIn, let location = selectedLocation {
                 BottomCheckInCard(
-                    merchant: location.asMerchant
+                    merchant: location.asMerchant,
+                    isLoading: isValidating
                 ) {
                     startCheckIn(location)
                 }
@@ -330,13 +230,27 @@ struct MapView: View {
     }
     
     // MARK: Check-In Actions
-    // Start the check-in process (just UI + timer)
+    // Step 1: validate with dryRun: false, then show progress card on success
     private func startCheckIn(_ location: NearbyLocationResponse) {
-        withAnimation {
-            selectedLocation = location
-            isCheckingIn = true
-            elapsedTime = 0
-            progress = 0
+        guard let userLocation = locationManager.location?.coordinate else { return }
+        selectedLocation = location
+        isValidating = true
+
+        LocationAPI.shared.checkIn(locationId: location.id, userCoordinate: userLocation, dryRun: true) { result in
+            isValidating = false
+            switch result {
+            case .success:
+                withAnimation {
+                    isCheckingIn = true
+                    elapsedTime = 0
+                    progress = 0
+                }
+            case .failure(let error):
+                errorMessage = error.localizedDescription
+                showAlert = true
+                showSuccessAlert = false
+                selectedLocation = nil
+            }
         }
     }
     
@@ -350,16 +264,15 @@ struct MapView: View {
         }
     }
     
-    // Called when the timer finishes
+    // Step 2: called when timer finishes — actual check-in with dryRun: true
     private func completeCheckIn() {
         guard let location = selectedLocation,
               let userLocation = locationManager.location?.coordinate else {
             resetCheckIn()
             return
         }
-        
-        // ✅ Call API after timer ends
-        LocationAPI.shared.checkIn(locationId: location.id, userCoordinate: userLocation) { result in
+
+        LocationAPI.shared.checkIn(locationId: location.id, userCoordinate: userLocation, dryRun: false) { result in
             switch result {
             case .success(let response):
                 print("🎉 Check-in success:", response.message)
@@ -522,6 +435,7 @@ struct CheckInProgressCard: View {
 
 struct BottomCheckInCard: View {
     let merchant: MerchantLocation
+    var isLoading: Bool = false
     let onCheckIn: () -> Void
     
     var body: some View {
@@ -579,16 +493,21 @@ struct BottomCheckInCard: View {
                     onCheckIn()
                 }) {
                     HStack(spacing: 8) {
-                        Image(systemName: "location.fill")
-                        Text("Check In (+\(merchant.xpReward) XP)")
-                            .font(.system(size: 16, weight: .bold))
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Image(systemName: "location.fill")
+                            Text("Check In (+\(merchant.xpReward) XP)")
+                                .font(.system(size: 16, weight: .bold))
+                        }
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(merchant.can_checkin ? Color.green : Color.gray) // gray if cannot check in
+                    .background(merchant.can_checkin && !isLoading ? Color.green : Color.gray)
                     .cornerRadius(16)
                 }
-                .disabled(!merchant.can_checkin) // disables button if cannot check in
+                .disabled(!merchant.can_checkin || isLoading)
                 
             }
             .padding()

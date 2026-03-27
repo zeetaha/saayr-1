@@ -31,6 +31,7 @@ struct SAAYRApp: App {
                         .environment(\.layoutDirection, languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight)
                 }
             }
+            .preferredColorScheme(.light)
         }
     }
 }

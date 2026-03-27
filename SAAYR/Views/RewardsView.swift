@@ -244,16 +244,19 @@ struct RewardCard: View {
             Button(action: {
                 onRedeem(reward)
             }) {
-                HStack {
+                HStack(spacing: 4) {
                     if !canAfford {
                         Image(systemName: "lock.fill")
+                            .font(.system(size: 10, weight: .semibold))
                     }
                     Text(canAfford ? "Redeem" : "Locked")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.white)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
                 .background(
                     ZStack {
                         if canAfford {

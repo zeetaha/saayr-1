@@ -32,7 +32,7 @@ struct HomeView: View {
                         VStack(spacing: 24) {
                             greetingSection
                             PetDisplayCard(
-                                petName: userManager.userData.petName,
+                                petName: userManager.userData.petName ?? "",
                                 level: userManager.userData.level,
                                 stage: userManager.userData.petStage,
                                 xpProgress: userManager.userData.xpProgress
@@ -40,9 +40,9 @@ struct HomeView: View {
                             .padding(.horizontal)
                             
                             statsGrid
-//                            PVPBattleCard {
-//                                showPVPPayment = true
-//                            }
+                           PVPBattleCard {
+                               showPVPPayment = userManager.userData.pvp_enabled
+                           }
                             leaderboardSection
                         }
                         .frame(maxWidth: 700) // Limit width on iPad
@@ -54,7 +54,8 @@ struct HomeView: View {
                 }
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $showPVPPayment) {
+            
+            .fullScreenCover(isPresented: $showPVPPayment) {
                 PVPPaymentDialog(isPresented: $showPVPPayment)
             }
             .onAppear {
@@ -74,7 +75,7 @@ struct HomeView: View {
                     .font(.system(size: 14))
                     .foregroundColor(.gray)
                 
-                Text(userManager.userData.fullName.components(separatedBy: " ").first! + " 👋")
+                Text(userManager.userData.fullName ?? "".components(separatedBy: " ").first! + " 👋")
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.black)
             }
@@ -115,8 +116,8 @@ struct HomeView: View {
             )
             StatCard(
                 icon: "map.fill",
-                label: languageManager.currentLanguage == .english ? "Check-ins" : "التسجيلات",
-                value: "\(userManager.userData.checkInCount)",
+                label: languageManager.currentLanguage == .english ? "Total Points" : "مجموع النقاط",
+                value: userManager.userData.petType ?? "0",
                 gradient: [Color.green, Color.teal]
             )
             StatCard(
@@ -230,11 +231,12 @@ struct QuickActionButton: View {
 
 struct PVPBattleCard: View {
     @EnvironmentObject var languageManager: LanguageManager
+    @EnvironmentObject var userManager: UserManager
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack() {
                 // Icon with red background
                 ZStack {
                     RoundedRectangle(cornerRadius: 16)
@@ -250,7 +252,7 @@ struct PVPBattleCard: View {
                     Text(languageManager.currentLanguage == .english ? "PVP Battle" : "معركة PVP")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
-                    Text(languageManager.currentLanguage == .english ? "Entry: 5 SAR" : "الدخول: 5 ريال")
+                    Text(userManager.userData.pvp_message)
                         .font(.system(size: 14))
                         .foregroundColor(.gray)
                 }
@@ -264,12 +266,12 @@ struct PVPBattleCard: View {
             }
             .padding(20)
             .background(
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(Color(red: 0.07, green: 0.09, blue: 0.15)) // #111827
+                userManager.userData.pvp_enabled  ? RoundedRectangle(cornerRadius: 24)
+                    .fill(Color(red: 0.07, green: 0.09, blue: 0.15)) : RoundedRectangle(cornerRadius: 24)
+                    .fill(Color(red: 0.07, green: 0.09, blue: 0.15).opacity(0.7))
             )
         }
         .buttonStyle(PlainButtonStyle()) // Remove default button styling
-        .padding(.horizontal)
     }
 }
 
@@ -476,6 +478,50 @@ struct CircularProgressRing: View {
                 .animation(.easeInOut(duration: 0.4), value: progress)
         }
         .frame(width: size, height: size)
+    }
+}
+
+// MARK: - ActivePVPBanner
+struct ActivePVPBanner: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+        HStack(spacing: 12) {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Active PVP Battle")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                Text("Tap to return to battle")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(
+            LinearGradient(
+                colors: [Color.orange, Color(red: 1, green: 0.45, blue: 0)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .shadow(color: Color.orange.opacity(0.4), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

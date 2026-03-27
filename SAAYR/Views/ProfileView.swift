@@ -83,8 +83,8 @@ struct ProfileView: View {
                             
                             // MARK: Stats
                             HStack(spacing: 12) {
-                                StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInCount)", label: "Check-ins")
-                                StatCardProfile(icon: "bolt.fill", value: "0", label: "Battles")
+                                StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInStreak)", label: "Check-ins")
+                                StatCardProfile(icon: "bolt.fill", value: "\(userManager.userData.pvpWins)", label: "Battles")
                                 StatCardProfile(icon: "gift.fill", value: "\(0)", label: "Rewards")
                             }
                         }
@@ -102,7 +102,7 @@ struct ProfileView: View {
                     EditableInfoCard(
                         fullName: $fullName,
                         email: $email,
-                        petName: userManager.userData.petName,
+                        petName: userManager.userData.petName ?? "",
                         isEditing: $isEditing
                     )
                     .padding(.horizontal)
@@ -174,8 +174,8 @@ struct ProfileView: View {
             }
         }
         .onAppear {
-            fullName = userManager.userData.fullName
-            email = userManager.userData.email
+            fullName = userManager.userData.fullName ?? ""
+            email = userManager.userData.email ?? ""
         }
         .sheet(isPresented: $showGroups) {
             GroupsView()
@@ -270,7 +270,7 @@ struct ProfileHeaderCard: View {
                         )
                     
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(user.fullName)
+                        Text(user.fullName ?? "")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
                         

@@ -346,7 +346,7 @@ struct TicketDetailView: View {
     }
 
     // Start polling ticket details periodically (every 5 seconds)
-    private func startPolling(intervalSeconds: UInt64 = 30) {
+    private func startPolling(intervalSeconds: UInt64 = 5) {
         stopPolling()
         pollingTask = Task {
             let nanos = intervalSeconds * 1_000_000_000

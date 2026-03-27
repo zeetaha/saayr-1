@@ -31,8 +31,10 @@ class WebService {
     static var createTicket = baseUrl + "tickets/create"
     static var uploadImage = baseUrl + "tickets/upload-image"
     static var myTickets = baseUrl + "tickets/my-tickets"
+    static var pvpPaymentWebview = baseUrl + "user/pvp/payment-webview"
     static var rewardsCatalog = baseUrl + "rewards/catalog"
     static var redeemReward = baseUrl + "rewards/redeem"
+    static var myMatch = baseUrl + "user/pvp/my-match"
    
     
 //#if DEBUG

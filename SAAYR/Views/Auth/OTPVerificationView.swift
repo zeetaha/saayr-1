@@ -53,7 +53,11 @@ struct OTPVerificationView: View {
                 resendTimer -= 1
             }
         }
-        .onChange(of: otp) { _ in
+        .onChange(of: otp) { newValue in
+            // Clear error when user starts typing
+            if !newValue.isEmpty {
+                authManager.errorMessage = nil
+            }
             autoVerify()
         }
     }
@@ -82,6 +86,21 @@ struct OTPVerificationView: View {
     // MARK: - Main Content
     private var content: some View {
         VStack(spacing: 32) {
+            
+            // Error Message
+            if let errorMessage = authManager.errorMessage, !errorMessage.isEmpty {
+                HStack {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(.red)
+                    Text(errorMessage)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.red)
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+            }
             
             // Icon
             ZStack {
@@ -271,14 +290,23 @@ struct OTPVerificationView: View {
     private func deleteDigit() {
         guard !otp.isEmpty else { return }
         otp.removeLast()
+        isVerifying = false
     }
     
     private func autoVerify() {
         guard otp.count == 6, !isVerifying else { return }
 
         isVerifying = true
+        authManager.errorMessage = nil // Clear previous errors before retry
 
         authManager.verifyOTP(otp: otp) { isNewUser in
+            // ❌ Check if verification failed
+            if authManager.errorMessage != nil {
+                isVerifying = false
+                otp = "" // Clear OTP for user to retry
+                return
+            }
+
             // 1️⃣ Show success overlay
             withAnimation(.easeInOut) {
                 showSuccess = true

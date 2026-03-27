@@ -1,168 +1,76 @@
 import SwiftUI
-import PassKit
+import WebKit
 
 struct PVPPaymentDialog: View {
     @Binding var isPresented: Bool
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
-    
+
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                // Icon
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.red, Color.pink],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 80, height: 80)
-                    
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(.white)
-                }
-                .padding(.top, 20)
+            WebView(
+                url: URL(string: "https://api.saayr.sa/api/v1/user/pvp/payment-webview?token=\(UserModel.shared.user?.accessToken ?? "")")!
+            ) { message in
                 
-                VStack(spacing: 8) {
-                    Text(languageManager.text("pvp.title"))
-                        .font(.system(size: 24, weight: .bold))
-                    
-                    Text("Battle against another player")
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
+                print("✅ Received:", message)
                 
-                // Match Details
-                VStack(spacing: 16) {
-                    DetailRow(
-                        icon: "dollarsign.circle.fill",
-                        label: languageManager.text("pvp.entry"),
-                        value: "5 SAR",
-                        color: .blue
-                    )
-                    
-                    Divider()
-                    
-                    DetailRow(
-                        icon: "trophy.fill",
-                        label: languageManager.text("pvp.winner"),
-                        value: "8 SAR",
-                        color: .yellow
-                    )
-                    
-                    Divider()
-                    
-                    DetailRow(
-                        icon: "star.fill",
-                        label: "XP Reward",
-                        value: "+200 XP",
-                        color: .orange
-                    )
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(UIColor.secondarySystemGroupedBackground))
-                )
-                .padding(.horizontal)
-                
-                // Warning
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    
-                    Text("Entry fee is non-refundable")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.orange.opacity(0.1))
-                )
-                .padding(.horizontal)
-                
-                Spacer()
-                
-                // Apple Pay Button
-                ApplePayButtonView {
-                    handleApplePayPayment()
-                }
-                .frame(height: 50)
-                .padding(.horizontal)
-                
-                Button(action: {
-                    isPresented = false
-                }) {
-                    Text("Cancel")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.bottom)
+
+                    if let dict = message as? [String: Any],
+                       let type = dict["type"] as? String,
+                       type == "navigate_back" {
+                        
+                        print("🔙 Closing WebView")
+                        isPresented = false
+                    }
             }
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-    
-    func handleApplePayPayment() {
-        // Simulate payment success
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            userManager.startPVPSession()
-            isPresented = false
+                .edgesIgnoringSafeArea(.bottom)
+                
         }
     }
 }
+struct WebView: UIViewRepresentable {
+    let url: URL
+    var onMessage: (Any) -> Void   // 👈 callback to SwiftUI
 
-struct DetailRow: View {
-    let icon: String
-    let label: String
-    let value: String
-    let color: Color
-    @EnvironmentObject var languageManager: LanguageManager
-    
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(color)
-                .frame(width: 30)
-            
-            Text(label)
-                .font(.system(size: 16))
-                .foregroundColor(.primary)
-            
-            Spacer()
-            
-            Text(value)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.primary)
-        }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onMessage: onMessage)
     }
-}
 
-// Apple Pay Button Wrapper
-struct ApplePayButtonView: View {
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: "apple.logo")
-                    .font(.system(size: 20))
-                Text("Pay")
-                    .font(.system(size: 18, weight: .semibold))
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        
+        // 👇 Add message handler
+        config.userContentController.add(
+            context.coordinator,
+            name: "saayrBridge"
+        )
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+        
+        webView.load(URLRequest(url: url))
+        
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        var onMessage: (Any) -> Void
+        
+        init(onMessage: @escaping (Any) -> Void) {
+            self.onMessage = onMessage
+        }
+
+        // 👇 Receive message from JS
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            
+            if message.name == "saayrBridge" {
+                print("📩 Message from Web:", message.body)
+                
+                onMessage(message.body)   // send to SwiftUI
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color.black)
-            .cornerRadius(12)
         }
     }
 }

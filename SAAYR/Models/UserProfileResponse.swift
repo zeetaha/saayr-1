@@ -8,11 +8,11 @@
 
 struct UserProfileResponse: Decodable {
     let id: Int
-    let fullName: String
+    let fullName: String?
     let falconName: String?
-    let email: String
+    let email: String?
     let avatar: String?
-    let city: String
+    let city: String?
     let currentLevel: Int
     let totalXP: Int
     let petStage: Int
@@ -37,9 +37,13 @@ struct DashboardResponse: Decodable {
     let user_level: Int
     let xp_progress: Int
     let total_xp: Int
+    let total_points: Int
     let total_checkins: Int
     let pet_stage: Int
     let xp_to_next_level: Int
+    let pvp_wins: Int
+    let pvp_enabled: Bool
+    let pvp_message: String
 }
 
 struct LeaderboardEntry: Decodable, Identifiable {
@@ -59,4 +63,16 @@ struct LeaderboardResponse: Decodable {
     let my_points: Int
     let leaderboard: [LeaderboardEntry]
     let total: Int?
+}
+
+struct MyMatchResponse: Decodable {
+    let success: Bool
+    let message: String?
+    let data: MyMatchData?
+}
+
+struct MyMatchData: Decodable {
+    let match_id: Int
+    let status: String
+    let result: String
 }

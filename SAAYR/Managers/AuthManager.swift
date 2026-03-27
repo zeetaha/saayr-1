@@ -106,10 +106,6 @@ class AuthManager: ObservableObject {
             "otp": otp
         ]
         
-        if phoneNumber == "1111111111" {
-            parameters ["phone_number"] = "1111111111"
-        }
-        
         
         if self.authState == .resetOtp {
             parameters["new_passcode"] = tempPasscode
@@ -147,8 +143,8 @@ class AuthManager: ObservableObject {
                         }
                         
                     case .failure(let error):
-                        self.errorMessage = error.localizedDescription
-                        print("❌ API Error:", error.localizedDescription)
+                        self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+                        print("❌ API Error:", self.errorMessage ?? "")
                     }
                 }
             }
@@ -187,8 +183,8 @@ class AuthManager: ObservableObject {
                         }
                         
                     case .failure(let error):
-                        self.errorMessage = error.localizedDescription
-                        print("❌ API Error:", error.localizedDescription)
+                        self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+                        print("❌ API Error:", self.errorMessage ?? "")
                     }
                 }
             }
@@ -214,9 +210,6 @@ class AuthManager: ObservableObject {
             "passcode": tempPasscode
         ]
         
-        if phoneNumber == "1111111111" {
-            parameters ["phone_number"] = "1111111111"
-        }
         
         
         
@@ -551,5 +544,28 @@ class AuthManager: ObservableObject {
         withAnimation {
             authState = .phoneEntry
         }
+    }
+    
+    // MARK: - Error Handling
+    
+    private func extractErrorMessage(from error: AFError) -> String? {
+        // Provide user-friendly messages based on error codes
+        if let code = error.responseCode {
+            switch code {
+            case 400:
+                return "Invalid OTP. Please check your input."
+            case 401:
+                return "Unauthorized. Please try again."
+            case 422:
+                return "Invalid OTP or phone number. Please try again."
+            case 429:
+                return "Too many attempts. Please try again later."
+            case 500...599:
+                return "Server error. Please try again later."
+            default:
+                return nil
+            }
+        }
+        return nil
     }
 }

@@ -1,18 +1,22 @@
 import Foundation
 
 struct UserData: Codable {
-    var fullName: String
-    var email: String
-    var phoneNumber: String
-    var petName: String
-    var petType: String
+    var fullName: String?
+    var email: String?
+    var phoneNumber: String?
+    var petName: String?
+    var petType: String?
     var totalXP: Int
     var checkInStreak: Int
+    var pvpWins: Int
     var checkInLogs: [CheckInLog]
-    var city: String       // <-- add this
+    var city: String?       // <-- add this
     var transactions: [Transaction]
     var achievements: [Achievement]
     var groups: [String] // Group IDs
+    
+    var pvp_enabled : Bool = false
+    var pvp_message : String = ""
     
     var level: Int {
         LevelSystem.getLevelFromXP(totalXP)
@@ -138,7 +142,8 @@ extension UserData {
             petName: profile.falconName ?? "Falcon",
             petType: "Unknown", // Or map if API provides
             totalXP: profile.totalXP,
-            checkInStreak: 0, // Default or map if API provides
+            checkInStreak: 0,
+            pvpWins:0, // Default or map if API provides
             checkInLogs: [],
             city: profile.city,
             transactions: [],
@@ -153,14 +158,17 @@ extension UserData {
             email: profile.email,
             phoneNumber: "", // API doesn't provide phone, default to empty
             petName: profile.falconName ?? "Falcon",
-            petType: "Unknown",
+            petType: "\(dashboard.total_points)",
             totalXP: dashboard.total_xp,
-            checkInStreak: 0,
+            checkInStreak: dashboard.total_checkins,
+            pvpWins:dashboard.pvp_wins,
             checkInLogs: [],
             city: profile.city,
             transactions: [],
             achievements: [],
-            groups: []
+            groups: [],
+            pvp_enabled: dashboard.pvp_enabled,
+            pvp_message: dashboard.pvp_message
         )
     }
 }

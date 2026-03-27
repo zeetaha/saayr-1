@@ -19,12 +19,39 @@ struct SubmitTicketView: View {
     @State private var isSubmitting: Bool = false
     @State private var errorMessage: String = ""
     @State private var successMessage: String = ""
+    @State private var showSuccessToast: Bool = false
 
     var body: some View {
         NavigationView {
             ZStack {
                 Color(UIColor.systemGroupedBackground)
                     .ignoresSafeArea()
+                
+                // Success Toast
+                if showSuccessToast {
+                    VStack {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 20))
+                            
+                            Text(successMessage)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.green)
+                                
+                            
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background(Color.white.opacity(1))
+                        .cornerRadius(12)
+                        .padding()
+                        
+                        Spacer()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
+                }
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -162,15 +189,6 @@ struct SubmitTicketView: View {
                                     .background(Color.red.opacity(0.1))
                                     .cornerRadius(8)
                             }
-
-                            if !successMessage.isEmpty {
-                                Text(successMessage)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.green)
-                                    .padding()
-                                    .background(Color.green.opacity(0.1))
-                                    .cornerRadius(8)
-                            }
                         }
                         .padding()
                         .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
@@ -287,8 +305,16 @@ struct SubmitTicketView: View {
 
                     if success {
                         successMessage = message
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            dismiss()
+                        withAnimation {
+                            showSuccessToast = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            withAnimation {
+                                showSuccessToast = false
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                dismiss()
+                            }
                         }
                     } else {
                         errorMessage = message

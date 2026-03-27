@@ -4,6 +4,7 @@ import Combine
 
 class UserManager: ObservableObject {
     @Published var activePVPSession = false
+    @Published var activeMatchStatus: Bool = false
     
     // MARK: - Published properties
     @Published var leaderboardUsers: [LeaderboardUser] = []
@@ -16,7 +17,7 @@ class UserManager: ObservableObject {
         petName: "",
         petType: "",
         totalXP: 0,
-        checkInStreak: 0,
+        checkInStreak: 0, pvpWins: 0,
         checkInLogs: [],
         city: "",
         transactions: [],
@@ -76,9 +77,11 @@ class UserManager: ObservableObject {
             
             self.fetchLeaderboard { leaderboardResponse in
                 guard let leaderboardResponse = leaderboardResponse else { return }
-                
+
                 self.updateLeaderboard(from: leaderboardResponse.leaderboard)
             }
+
+            self.fetchMyMatch()
         }
     }
 
@@ -116,6 +119,29 @@ class UserManager: ObservableObject {
             case .failure(let error):
                 print("❌ API error (dashboard):", error.localizedDescription)
                 completion(nil)
+            }
+        }
+    }
+
+    // MARK: - Fetch My PVP Match
+    func fetchMyMatch() {
+        ServiceModel.shared.getRequest(endpoint: WebService.myMatch) { [weak self] result in
+            switch result {
+            case .success(let data):
+                do {
+                    let decoded = try JSONDecoder().decode(MyMatchResponse.self, from: data)
+                    DispatchQueue.main.async {
+                        if decoded.success && decoded.data?.status == "in_progress" {
+                            self?.activeMatchStatus = true
+                        } else {
+                            self?.activeMatchStatus = false
+                        }
+                    }
+                } catch {
+                    print("❌ Decoding error (my-match):", error)
+                }
+            case .failure(let error):
+                print("❌ API error (my-match):", error.localizedDescription)
             }
         }
     }
@@ -237,6 +263,7 @@ extension UserData {
             petType: "Bird",
             totalXP: dashboard.total_xp,
             checkInStreak: 0,
+            pvpWins: 0,
             checkInLogs: [],
             city: "",
             transactions: [],

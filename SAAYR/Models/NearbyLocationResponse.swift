@@ -102,14 +102,16 @@ final class LocationAPI {
     func checkIn(
             locationId: Int,
             userCoordinate: CLLocationCoordinate2D,
-            completion: @escaping @Sendable (Result<CheckInResponse, Error>) -> Void
+            dryRun: Bool,
+            completion: @escaping @Sendable (Result<CheckInResponse, Error>) -> Void,
         ) {
 
 
             let params: [String: Any] = [
                 "location_id": locationId,
                 "latitude": userCoordinate.latitude,
-                "longitude": userCoordinate.longitude
+                "longitude": userCoordinate.longitude,
+                "dry_run": dryRun
             ]
 
             
