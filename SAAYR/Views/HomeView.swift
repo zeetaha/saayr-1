@@ -5,6 +5,7 @@ struct HomeView: View {
     @EnvironmentObject var userManager: UserManager
     @State private var showPVPPayment = false
     @State private var particles: [Particle] = []
+    @State private var pollTimer: Timer?
     
     var body: some View {
         NavigationView {
@@ -61,6 +62,18 @@ struct HomeView: View {
             .onAppear {
                 generateParticles()
                 userManager.fetchAllUserData()
+                pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                    userManager.fetchMyMatch()
+                }
+            }
+            .onDisappear {
+                pollTimer?.invalidate()
+                pollTimer = nil
+            }
+            .onChange(of: showPVPPayment) { isShowing in
+                if !isShowing {
+                    userManager.fetchMyMatch()
+                }
             }
         }
         .navigationViewStyle(StackNavigationViewStyle()) // Fix iPad NavigationView
