@@ -76,3 +76,70 @@ struct MyMatchData: Decodable {
     let status: String
     let result: String
 }
+
+// MARK: - PVP Info
+
+struct PVPInfoResponse: Decodable {
+    let entry_fee: PVPEntryFee
+    let rewards: [PVPReward]
+}
+
+struct PVPEntryFee: Decodable {
+    let amount_sar: Int
+    let first_match_free: Bool
+    let free_matches_per_day: Int
+}
+
+struct PVPReward: Decodable {
+    let type: String
+    let xp: Int?
+    let message: String
+}
+
+// MARK: - PVP Match Flow
+
+struct MatchmakeAPIResponse: Decodable {
+    let success: Bool?
+    let message: String?
+    let data: MatchmakeData?
+}
+
+struct MatchmakeData: Decodable {
+    let payment_id: String
+}
+
+struct FullMatchResponse: Decodable {
+    let success: Bool
+    let message: String?
+    let data: FullMatchData?
+}
+
+struct FullMatchData: Decodable {
+    let match_id: Int
+    let status: String         // "waiting", "matched", "in_progress", "completed", "cancelled", "voided"
+    let result: String
+    let i_won: Bool
+    let winner_xp: Int
+    let my: MatchParticipant
+    let opponent: MatchParticipant?
+    let missions: [MatchMission]
+    let my_progress: [String: Int]
+    let opponent_progress: [String: Int]
+    let activity_log: [String]
+    let entry_fee: Int?
+    let started_at: String?
+    let completed_at: String?
+}
+
+struct MatchParticipant: Decodable {
+    let user_id: Int
+    let falcon_name: String
+    let full_name: String?
+}
+
+struct MatchMission: Decodable {
+    let id: String
+    let icon: String
+    let label: String
+    let target: Int
+}

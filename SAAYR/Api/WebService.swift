@@ -35,6 +35,10 @@ class WebService {
     static var rewardsCatalog = baseUrl + "rewards/catalog"
     static var redeemReward = baseUrl + "rewards/redeem"
     static var myMatch = baseUrl + "user/pvp/my-match"
+    static var pvpInfo = baseUrl + "user/pvp/info"
+    static var pvpMatchmake = baseUrl + "user/pvp/payment/" // append: {paymentId}/matchmake
+    static var pvpMatchState = baseUrl + "user/pvp/match/" // append: {matchId}/state
+    static var pvpCancelMatch = baseUrl + "user/pvp/match/cancel"
    
     
 //#if DEBUG
@@ -47,5 +51,8 @@ class WebService {
     
     
     static var cvvToken = ""
-    
+    static var moyasarPublishableKey = "pk_test_zh19C8QcQyT2n4mu9kVHtzR9aFhotACBbs7XJcN2"
+    //MOYASAR_SECRET_KEY=sk_test_XPLmF2jZDZogqnTePhXpzbZPLB9PNUYDroD67nW4"
+    static var applePayMerchantId = "merchant.com.saayr.app"
+
 }

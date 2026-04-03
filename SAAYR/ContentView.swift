@@ -49,7 +49,7 @@ struct ContentView: View {
             .accentColor(.blue)
         }
         .fullScreenCover(isPresented: $showPVPPayment) {
-            PVPPaymentDialog(isPresented: $showPVPPayment)
+            ActiveMatchView(isPresented: $showPVPPayment)
         }
     }
 

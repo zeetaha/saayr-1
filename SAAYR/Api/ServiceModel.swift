@@ -250,6 +250,90 @@ class ServiceModel {
         }
     }
 
+    // MARK: - Fetch PVP Info
+    func fetchPVPInfo(completion: @escaping (Result<PVPInfoResponse, Error>) -> Void) {
+        getRequest(endpoint: WebService.pvpInfo) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(PVPInfoResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    // MARK: - PVP Match Flow
+
+    func startMatchmaking(paymentId: String, completion: @escaping (Result<MatchmakeAPIResponse, Error>) -> Void) {
+        let endpoint = WebService.pvpMatchmake + "\(paymentId)/matchmake"
+        print("startMatchmaking endpoint \(endpoint)")
+        postRequest(endpoint: endpoint) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(MatchmakeAPIResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    func fetchMyMatchFull(completion: @escaping (Result<FullMatchResponse, Error>) -> Void) {
+        getRequest(endpoint: WebService.myMatch) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(FullMatchResponse.self, from: data)
+                    print("fetchMyMatchFull \(response)")
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    func fetchMatchState(matchId: Int, completion: @escaping (Result<FullMatchResponse, Error>) -> Void) {
+        let endpoint = WebService.pvpMatchState + "\(matchId)/state"
+        getRequest(endpoint: endpoint) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(FullMatchResponse.self, from: data)
+                    print("fetchMatchState \(response)")
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    func cancelMatch(completion: @escaping (Result<Bool, Error>) -> Void) {
+        postRequest(endpoint: WebService.pvpCancelMatch) { result in
+            switch result {
+            case .success:
+                completion(.success(true))
+            case .failure(let error):
+                // 409 = race already started, treat as "do not cancel"
+                completion(.failure(error))
+            }
+        }
+    }
+
     func getHeader(forMultipart: Bool = false)-> HTTPHeaders{
         var headers: HTTPHeaders = [
                 "Cache-Control": "no-cache",

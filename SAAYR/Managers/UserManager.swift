@@ -5,6 +5,7 @@ import Combine
 class UserManager: ObservableObject {
     @Published var activePVPSession = false
     @Published var activeMatchStatus: Bool = false
+    @Published var activeMatchData: FullMatchData? = nil
     
     // MARK: - Published properties
     @Published var leaderboardUsers: [LeaderboardUser] = []
@@ -129,12 +130,14 @@ class UserManager: ObservableObject {
             switch result {
             case .success(let data):
                 do {
-                    let decoded = try JSONDecoder().decode(MyMatchResponse.self, from: data)
+                    let decoded = try JSONDecoder().decode(FullMatchResponse.self, from: data)
                     DispatchQueue.main.async {
                         if decoded.success && decoded.data?.status == "in_progress" {
                             self?.activeMatchStatus = true
+                            self?.activeMatchData = decoded.data
                         } else {
                             self?.activeMatchStatus = false
+                            self?.activeMatchData = nil
                         }
                     }
                 } catch {

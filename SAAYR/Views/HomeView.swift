@@ -70,11 +70,6 @@ struct HomeView: View {
                 pollTimer?.invalidate()
                 pollTimer = nil
             }
-            .onChange(of: showPVPPayment) { isShowing in
-                if !isShowing {
-                    userManager.fetchMyMatch()
-                }
-            }
         }
         .navigationViewStyle(StackNavigationViewStyle()) // Fix iPad NavigationView
     }

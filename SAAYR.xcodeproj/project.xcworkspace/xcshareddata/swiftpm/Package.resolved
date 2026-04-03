@@ -1,5 +1,5 @@
 {
-  "originHash" : "4106d8538067daa9d0c2d5fd9e6947b37eaaf975292d75cd0fc3ff39d862d113",
+  "originHash" : "ecdf7e2ba881cc4c3545d8e27124e5ddf921dd110bc144bc962eeb063a8c09dd",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "d30a5fad881137e2267f96a8e3fc35c58999bb94",
         "version" : "8.6.2"
+      }
+    },
+    {
+      "identity" : "moyasar-ios-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/moyasar/moyasar-ios-sdk",
+      "state" : {
+        "revision" : "57bd58daec1e9408476beace18a45c8af1267158",
+        "version" : "3.2.0"
       }
     }
   ],
