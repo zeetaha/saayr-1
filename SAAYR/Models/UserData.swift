@@ -140,7 +140,7 @@ extension UserData {
             email: profile.email,
             phoneNumber: "", // API doesn't provide phone, default to empty
             petName: profile.falconName ?? "Falcon",
-            petType: "Unknown", // Or map if API provides
+            petType: "0", // Or map if API provides
             totalXP: profile.totalXP,
             checkInStreak: 0,
             pvpWins:0, // Default or map if API provides

@@ -4,6 +4,9 @@ struct HomeView: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
     @State private var showPVPPayment = false
+    @State private var showActiveMatch = false
+    @State private var activeMatchForResume: FullMatchData? = nil
+    @State private var isCheckingPVP = false
     @State private var particles: [Particle] = []
     @State private var pollTimer: Timer?
     
@@ -41,8 +44,22 @@ struct HomeView: View {
                             .padding(.horizontal)
                             
                             statsGrid
-                           PVPBattleCard {
-                               showPVPPayment = userManager.userData.pvp_enabled
+                           PVPBattleCard(isLoading: isCheckingPVP) {
+                               guard userManager.userData.pvp_enabled, !isCheckingPVP else { return }
+                               isCheckingPVP = true
+                               ServiceModel.shared.fetchMyMatchFull { result in
+                                   DispatchQueue.main.async {
+                                       isCheckingPVP = false
+                                       if case .success(let response) = result,
+                                          let match = response.data,
+                                          match.status == "in_progress" {
+                                           activeMatchForResume = match
+                                           showActiveMatch = true
+                                       } else {
+                                           showPVPPayment = true
+                                       }
+                                   }
+                               }
                            }
                             leaderboardSection
                         }
@@ -58,6 +75,17 @@ struct HomeView: View {
             
             .fullScreenCover(isPresented: $showPVPPayment) {
                 PVPPaymentDialog(isPresented: $showPVPPayment)
+                    .environmentObject(languageManager)
+                    .environmentObject(userManager)
+            }
+            .fullScreenCover(isPresented: $showActiveMatch) {
+                if let match = activeMatchForResume {
+                    ActiveMatchView(
+                        isPresented: $showActiveMatch,
+                        initialMatch: match
+                    )
+                    .environmentObject(userManager)
+                }
             }
             .onAppear {
                 generateParticles()
@@ -240,8 +268,9 @@ struct QuickActionButton: View {
 struct PVPBattleCard: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
+    var isLoading: Bool = false
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack() {
@@ -250,11 +279,15 @@ struct PVPBattleCard: View {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Color(red: 0.94, green: 0.27, blue: 0.27)) // #EF4444
                         .frame(width: 52, height: 52)
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
+                    if isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                    }
                 }
-                
+
                 // Texts
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageManager.currentLanguage == .english ? "PVP Battle" : "معركة PVP")
@@ -264,9 +297,9 @@ struct PVPBattleCard: View {
                         .font(.system(size: 14))
                         .foregroundColor(.gray)
                 }
-                
+
                 Spacer()
-                
+
                 // Chevron
                 Image(systemName: "chevron.right")
                     .font(.system(size: 20, weight: .semibold))

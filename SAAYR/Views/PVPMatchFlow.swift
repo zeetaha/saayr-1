@@ -737,6 +737,7 @@ struct PlayerCard: View {
 struct ActiveMatchView: View {
     @Binding var isPresented: Bool
     @EnvironmentObject var userManager: UserManager
+    var initialMatch: FullMatchData? = nil
 
     @State private var match: FullMatchData? = nil
     @State private var pollTimer: Timer? = nil
@@ -770,8 +771,8 @@ struct ActiveMatchView: View {
             }
         }
         .onAppear {
-            match = userManager.activeMatchData
-            startPoll()
+            match = initialMatch ?? userManager.activeMatchData
+            if match != nil { startPoll() }
         }
         .onDisappear { stopPolling() }
     }

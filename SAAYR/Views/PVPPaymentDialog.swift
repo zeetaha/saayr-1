@@ -83,9 +83,7 @@ struct PVPPaymentDialog: View {
             ServiceModel.shared.fetchPVPInfo { result in
                 DispatchQueue.main.async {
                     isLoadingInfo = false
-                    if case .success(let info) = result {
-                        pvpInfo = info
-                    }
+                    if case .success(let info) = result { pvpInfo = info }
                 }
             }
         }
