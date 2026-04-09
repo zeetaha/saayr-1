@@ -322,6 +322,23 @@ class ServiceModel {
         }
     }
 
+    // MARK: - Fetch Challenges
+    func fetchChallenges(completion: @escaping (Result<ChallengesResponse, Error>) -> Void) {
+        getRequest(endpoint: WebService.challenges) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(ChallengesResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     func cancelMatch(completion: @escaping (Result<Bool, Error>) -> Void) {
         postRequest(endpoint: WebService.pvpCancelMatch) { result in
             switch result {

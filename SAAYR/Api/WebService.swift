@@ -39,6 +39,7 @@ class WebService {
     static var pvpMatchmake = baseUrl + "user/pvp/payment/" // append: {paymentId}/matchmake
     static var pvpMatchState = baseUrl + "user/pvp/match/" // append: {matchId}/state
     static var pvpCancelMatch = baseUrl + "user/pvp/match/cancel"
+    static var challenges = baseUrl + "missions/challenges"
    
     
 //#if DEBUG
