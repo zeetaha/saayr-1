@@ -28,6 +28,7 @@ class WebService {
     static var leaderboard = baseUrl + "user/leaderboard"
     static var updateProfile = baseUrl + "user/profile"
     static var deleteAccount = baseUrl + "user/account"
+    static var supportUnreadCount = baseUrl + "tickets/my-tickets/unread-count"
     static var createTicket = baseUrl + "tickets/create"
     static var uploadImage = baseUrl + "tickets/upload-image"
     static var myTickets = baseUrl + "tickets/my-tickets"

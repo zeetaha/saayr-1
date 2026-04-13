@@ -44,10 +44,21 @@ struct DashboardResponse: Decodable {
     let pvp_wins: Int
     let pvp_enabled: Bool
     let pvp_message: String
+    let rewards: Int?
 }
 
 struct LeaderboardEntry: Decodable, Identifiable {
-    let id: Int?
+    var id: Int { user_id }
+    let rank: Int
+    let user_id: Int
+    let falcon_name: String?
+    let full_name: String?
+    let level: Int
+    let points: Int
+    let avatar: String?
+}
+
+struct MyRank: Decodable {
     let rank: Int
     let user_id: Int
     let falcon_name: String?
@@ -58,11 +69,13 @@ struct LeaderboardEntry: Decodable, Identifiable {
 }
 
 struct LeaderboardResponse: Decodable {
-    let city: String
-    let my_rank: Int
-    let my_points: Int
+    let city: String?
+    let period_start: String?
+    let period_end: String?
+    let my_rank: MyRank?
+    let my_points: Int?
     let leaderboard: [LeaderboardEntry]
-    let total: Int?
+    let total_entries: Int?
 }
 
 struct MyMatchResponse: Decodable {

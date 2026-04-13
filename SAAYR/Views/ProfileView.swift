@@ -15,6 +15,8 @@ struct ProfileView: View {
     @State private var errorMessage: String?
     
     @State private var showDeleteConfirm = false
+    @State private var showLogoutConfirm = false
+    @State private var supportUnreadCount: Int = 0
 
     
     var body: some View {
@@ -85,7 +87,7 @@ struct ProfileView: View {
                             HStack(spacing: 12) {
                                 StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInStreak)", label: "Check-ins")
                                 StatCardProfile(icon: "bolt.fill", value: "\(userManager.userData.pvpWins)", label: "Battles")
-                                StatCardProfile(icon: "gift.fill", value: "\(0)", label: "Rewards")
+                                StatCardProfile(icon: "gift.fill", value: "\(userManager.userData.rewards ?? 0)", label: "Rewards")
                             }
                         }
                         .padding()
@@ -120,11 +122,11 @@ struct ProfileView: View {
                         ProfileMenuItem(
                             icon: "questionmark.circle.fill",
                             label: "Support",
-                            gradient: [Color(hex: "#10B981"), Color(hex: "#059669")]
-                        )
-                        {
+                            gradient: [Color(hex: "#10B981"), Color(hex: "#059669")],
+                            badgeCount: supportUnreadCount
+                        ) {
                             showSupport = true
-                            }
+                        }
 
                         ProfileMenuItem(
                             icon: "gearshape.fill",
@@ -155,7 +157,7 @@ struct ProfileView: View {
                     
                     // MARK: Logout
                     Button(role: .destructive) {
-                        authManager.logout()
+                        showLogoutConfirm = true
                     } label: {
                         HStack {
                             Image(systemName: "arrow.backward.square")
@@ -176,6 +178,7 @@ struct ProfileView: View {
         .onAppear {
             fullName = userManager.userData.fullName ?? ""
             email = userManager.userData.email ?? ""
+            fetchSupportUnreadCount()
         }
         .sheet(isPresented: $showGroups) {
             GroupsView()
@@ -185,6 +188,12 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSetting) {
             SettingsView()
+        }
+        .alert("Logout?", isPresented: $showLogoutConfirm) {
+            Button("Logout", role: .destructive) { authManager.logout() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to log out?")
         }
         .alert("Delete Account?",
                isPresented: $showDeleteConfirm) {
@@ -204,6 +213,15 @@ struct ProfileView: View {
 
     }
     
+    private func fetchSupportUnreadCount() {
+        ServiceModel.shared.getRequest(endpoint: WebService.supportUnreadCount) { result in
+            guard case .success(let data) = result,
+                  let json = try? JSONDecoder().decode([String: Int].self, from: data),
+                  let count = json["unread_count"] else { return }
+            DispatchQueue.main.async { supportUnreadCount = count }
+        }
+    }
+
     private func DeleteApi() {
         isLoading = true
         errorMessage = nil
@@ -275,7 +293,7 @@ struct ProfileHeaderCard: View {
                             .foregroundColor(.white)
                         
                         HStack(spacing: 8) {
-                            Badge(icon: "star.fill", text: "Level \(user.level)")
+                            Badge(icon: "star.fill", text: "Level \(user.userLevel ?? 0)")
                             Badge(icon: "sparkles", text: "\(user.points) XP")
                         }
                     }
@@ -446,8 +464,9 @@ struct ProfileMenuItem: View {
     let icon: String
     let label: String
     var gradient: [Color] = [Color.purple, Color.blue]
+    var badgeCount: Int = 0
     var action: (() -> Void)? = nil
-    
+
     var body: some View {
         Button {
             action?()
@@ -459,7 +478,7 @@ struct ProfileMenuItem: View {
 
     private var content: some View {
         HStack(spacing: 16) {
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(
                         LinearGradient(
@@ -473,6 +492,18 @@ struct ProfileMenuItem: View {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(.white)
+                    .frame(width: 48, height: 48)
+
+                if badgeCount > 0 {
+                    Text(badgeCount > 99 ? "99+" : "\(badgeCount)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.red)
+                        .clipShape(Capsule())
+                        .offset(x: 6, y: -6)
+                }
             }
 
             Text(label)

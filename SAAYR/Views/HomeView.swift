@@ -37,7 +37,7 @@ struct HomeView: View {
                             greetingSection
                             PetDisplayCard(
                                 petName: userManager.userData.petName ?? "",
-                                level: userManager.userData.level,
+                                level: userManager.userData.level ?? 0,
                                 stage: userManager.userData.petStage,
                                 xpProgress: userManager.userData.xpProgress
                             )
@@ -159,7 +159,7 @@ struct HomeView: View {
             StatCard(
                 icon: "bolt.fill",
                 label: languageManager.currentLanguage == .english ? "Level" : "المستوى",
-                value: "\(userManager.userData.level)",
+                value: "\(userManager.userData.userLevel ?? 0)",
                 gradient: [Color.purple, Color.pink]
             )
         }
@@ -168,7 +168,7 @@ struct HomeView: View {
 
     
     private var leaderboardSection: some View {
-        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(languageManager.currentLanguage == .english ? "Leaderboard" : "قائمة المتصدرين")
                     .font(.system(size: 18, weight: .bold))
@@ -180,14 +180,19 @@ struct HomeView: View {
                         .foregroundColor(.blue)
                 }
             }
-            
-            Text("Riyadh")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.gray)
-            
-            VStack(spacing: 12) {
-                ForEach($userManager.leaderboardUsers) { user in
-                    LeaderboardCard(user: user)
+
+            HStack(spacing: 4) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                Text("Riyadh")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.gray)
+            }
+
+            VStack(spacing: 10) {
+                ForEach(userManager.leaderboardUsers) { user in
+                    LeaderboardCard(user: .constant(user), rank: user.rank)
                 }
             }
         }
@@ -217,7 +222,8 @@ struct Particle: Identifiable {
 }
 
 struct LeaderboardUser: Identifiable {
-    let id: Int        // use API id
+    let id: Int
+    let rank: Int
     let name: String
     let level: Int
     let points: Int
@@ -348,7 +354,7 @@ extension Color {
 // MARK: - PetDisplayCard
 struct PetDisplayCard: View {
     let petName: String
-    let level: Int
+    let level: Int?
     let stage: PetStage
     let xpProgress: XPProgress
     @EnvironmentObject var languageManager: LanguageManager
@@ -371,7 +377,7 @@ struct PetDisplayCard: View {
                 Text(petName)
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.black)
-                Text("\(languageManager.currentLanguage == .english ? "Level" : "المستوى") \(level)")
+                Text("\(languageManager.currentLanguage == .english ? "Level" : "المستوى") \(level ?? 0)")
                     .font(.system(size: 16))
                     .foregroundColor(.black.opacity(0.8))
             }
@@ -447,52 +453,71 @@ struct StatCard: View {
 
 // MARK: - LeaderboardCard
 struct LeaderboardCard: View {
-    @Binding var user: LeaderboardUser  // <-- only if you need to modify it
+    @Binding var user: LeaderboardUser
+    var rank: Int = 0
+
+    private var rankColor: Color {
+        switch rank {
+        case 1: return Color(hex: "#F59E0B")
+        case 2: return Color(hex: "#9CA3AF")
+        case 3: return Color(hex: "#D97706")
+        default: return Color(hex: "#6366F1")
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
+            // Rank badge
+            ZStack {
+                Circle()
+                    .fill(rankColor.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                Text(rank <= 3 ? ["🥇","🥈","🥉"][rank - 1] : "#\(rank)")
+                    .font(.system(size: rank <= 3 ? 18 : 12, weight: .bold))
+                    .foregroundColor(rankColor)
+            }
+
             // Avatar
             ZStack {
                 Circle()
                     .fill(user.bgColor)
-                    .frame(width: 55, height: 55)
-                
-                if let url = URL(string: user.avatar ?? "") {
+                    .frame(width: 44, height: 44)
+                if let urlStr = user.avatar, !urlStr.isEmpty, let url = URL(string: urlStr) {
                     AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .scaledToFit()
+                        image.resizable().scaledToFill()
                     } placeholder: {
-                        ProgressView()  // or a default avatar
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.white)
                     }
-                    .frame(width: 30, height: 30)
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
                 } else {
-                    Image(systemName: "person.fill")  // fallback
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 30, height: 30)
+                    Image(systemName: "person.fill")
+                        .foregroundColor(.white)
                 }
             }
 
             // Name + Level
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(user.name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.black)
                 Text("Level \(user.level)")
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
             }
             Spacer()
-            
+
             // Points
             Text("\(user.points) pts")
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.blue))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color(hex: "#6366F1")))
         }
-        .padding()
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.white))
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
     }

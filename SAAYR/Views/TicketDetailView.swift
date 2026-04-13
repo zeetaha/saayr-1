@@ -67,6 +67,7 @@ struct TicketDetailView: View {
         }
         .onAppear {
             fetchTicketDetails()
+            markTicketAsRead()
             startPolling()
         }
         .onDisappear {
@@ -266,6 +267,11 @@ struct TicketDetailView: View {
         }
     }
 
+
+    private func markTicketAsRead() {
+        let endpoint = WebService.myTickets + "/\(ticket.id)/mark-read"
+        ServiceModel.shared.postRequest(endpoint: endpoint, parameters: [:]) { _ in }
+    }
 
     // Fetch ticket details and messages from API
     func fetchTicketDetails() {

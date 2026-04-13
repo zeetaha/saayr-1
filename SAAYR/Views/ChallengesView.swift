@@ -286,6 +286,8 @@ private struct ChallengeCard: View {
         return icons[iconIndex % icons.count]
     }
 
+    private var isCompleted: Bool { challenge.isCompleted }
+
     private var statusText: String {
         switch challenge.status {
         case "completed":   return "Completed"
@@ -302,30 +304,38 @@ private struct ChallengeCard: View {
         }
     }
 
+    // Completed cards use a flat gray icon; active cards use the section accent
+    private var iconColor: Color {
+        isCompleted ? Color(hex: "#9CA3AF") : accentColor
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
-                // Icon
+                // Icon — checkmark when completed, normal icon otherwise
                 ZStack {
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(LinearGradient(
-                            colors: [accentColor, accentColor.opacity(0.7)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
+                        .fill(isCompleted
+                              ? AnyShapeStyle(Color(hex: "#E5E7EB"))
+                              : AnyShapeStyle(LinearGradient(
+                                  colors: [accentColor, accentColor.opacity(0.7)],
+                                  startPoint: .topLeading,
+                                  endPoint: .bottomTrailing
+                              ))
+                        )
                         .frame(width: 52, height: 52)
-                    Image(systemName: iconName)
+                    Image(systemName: isCompleted ? "checkmark.seal.fill" : iconName)
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(isCompleted ? Color(hex: "#6B7280") : .white)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(challenge.title)
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(isCompleted ? Color(hex: "#6B7280") : .black)
                     Text(challenge.description)
                         .font(.system(size: 13))
-                        .foregroundColor(.gray)
+                        .foregroundColor(isCompleted ? Color(hex: "#9CA3AF") : .gray)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -339,7 +349,7 @@ private struct ChallengeCard: View {
                     Spacer()
                     Text("\(challenge.current_count)/\(challenge.target_count)")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(isCompleted ? Color(hex: "#6B7280") : .black)
                 }
 
                 GeometryReader { geo in
@@ -348,11 +358,14 @@ private struct ChallengeCard: View {
                             .fill(Color.gray.opacity(0.15))
                             .frame(height: 8)
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(LinearGradient(
-                                colors: [accentColor, accentColor.opacity(0.7)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
+                            .fill(isCompleted
+                                  ? AnyShapeStyle(Color(hex: "#16A34A"))
+                                  : AnyShapeStyle(LinearGradient(
+                                      colors: [accentColor, accentColor.opacity(0.7)],
+                                      startPoint: .leading,
+                                      endPoint: .trailing
+                                  ))
+                            )
                             .frame(width: geo.size.width * challenge.progressFraction, height: 8)
                     }
                 }
@@ -363,17 +376,17 @@ private struct ChallengeCard: View {
             HStack(spacing: 4) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color(hex: "#D97706"))
+                    .foregroundColor(isCompleted ? Color(hex: "#9CA3AF") : Color(hex: "#D97706"))
                 Text("+\(challenge.xp_reward) XP")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color(hex: "#D97706"))
+                    .foregroundColor(isCompleted ? Color(hex: "#9CA3AF") : Color(hex: "#D97706"))
             }
         }
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 3)
+                .fill(isCompleted ? Color(hex: "#F9FAFB") : Color.white)
+                .shadow(color: Color.black.opacity(isCompleted ? 0.02 : 0.06), radius: 8, x: 0, y: 3)
         )
     }
 }

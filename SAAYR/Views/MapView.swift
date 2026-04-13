@@ -64,6 +64,8 @@ struct MapView: View {
                         isPartner: item.is_partner
                     )
                     .onTapGesture {
+                        // Block switching pins while a check-in is in progress
+                        guard !isCheckingIn else { return }
                         selectedLocation = item
                     }
                 }
@@ -154,6 +156,34 @@ struct MapView: View {
             
             
             
+            // MARK: Current Location Button
+            if !isCheckingIn {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            if let location = locationManager.location {
+                                withAnimation {
+                                    moveToUser(location)
+                                    trackingMode = .follow
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.blue)
+                                .frame(width: 48, height: 48)
+                                .background(Color.white)
+                                .clipShape(Circle())
+                                .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, selectedLocation != nil ? 180 : 32)
+                    }
+                }
+            }
+
             // MARK: Bottom Check-In
             if !isCheckingIn, let location = selectedLocation {
                 BottomCheckInCard(

@@ -20,6 +20,10 @@ struct SubmitTicketView: View {
     @State private var errorMessage: String = ""
     @State private var successMessage: String = ""
     @State private var showSuccessToast: Bool = false
+    @State private var showValidation: Bool = false
+
+    private var subjectEmpty: Bool { subject.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var descriptionEmpty: Bool { descriptionText.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         NavigationView {
@@ -61,22 +65,62 @@ struct SubmitTicketView: View {
 
                         VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 16) {
                             Group {
-                                Text("Subject")
-                                    .font(.system(size: 16, weight: .semibold))
+                                HStack {
+                                    Text("Subject")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("*")
+                                        .foregroundColor(.red)
+                                        .font(.system(size: 16, weight: .bold))
+                                }
 
-                                TextField("Brief description of your issue", text: $subject)
-                                    .padding()
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.2)))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    TextField("Brief description of your issue", text: $subject)
+                                        .padding()
+                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(showValidation && subjectEmpty ? Color.red : Color.gray.opacity(0.2), lineWidth: showValidation && subjectEmpty ? 1.5 : 1)
+                                        )
+                                    if showValidation && subjectEmpty {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .font(.system(size: 12))
+                                            Text("Subject is required")
+                                                .font(.system(size: 12, weight: .medium))
+                                        }
+                                        .foregroundColor(.red)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
+                                }
 
-                                Text("Description")
-                                    .font(.system(size: 16, weight: .semibold))
+                                HStack {
+                                    Text("Description")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("*")
+                                        .foregroundColor(.red)
+                                        .font(.system(size: 16, weight: .bold))
+                                }
 
-                                TextEditor(text: $descriptionText)
-                                    .frame(height: 160)
-                                    .padding(8)
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.2)))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    TextEditor(text: $descriptionText)
+                                        .frame(height: 160)
+                                        .padding(8)
+                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.systemBackground)))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(showValidation && descriptionEmpty ? Color.red : Color.gray.opacity(0.2), lineWidth: showValidation && descriptionEmpty ? 1.5 : 1)
+                                        )
+                                    if showValidation && descriptionEmpty {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .font(.system(size: 12))
+                                            Text("Description is required")
+                                                .font(.system(size: 12, weight: .medium))
+                                        }
+                                        .foregroundColor(.red)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                    }
+                                }
                             }
 
                             Text("Attach Photos (Optional)")
@@ -166,7 +210,7 @@ struct SubmitTicketView: View {
                                     LinearGradient(colors: [Color.purple.opacity(0.8), Color.purple], startPoint: .leading, endPoint: .trailing)
                                 )
                                 .cornerRadius(12)
-                                .disabled(isSubmitting || subject.trimmingCharacters(in: .whitespaces).isEmpty || descriptionText.trimmingCharacters(in: .whitespaces).isEmpty)
+                                .disabled(isSubmitting)
 
                                 Button(action: { dismiss() }) {
                                     Text("Cancel")
@@ -226,6 +270,7 @@ struct SubmitTicketView: View {
     }
 
     private func submitTicket() {
+        showValidation = true
         guard !subject.trimmingCharacters(in: .whitespaces).isEmpty else {
             errorMessage = "Please enter a subject"
             return

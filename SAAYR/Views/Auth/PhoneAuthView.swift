@@ -97,7 +97,7 @@ struct PhoneAuthView: View {
                                 .focused($isPhoneFocused)
                                 .foregroundColor(.black) // visible in both modes
                                 .placeholder(when: authManager.phoneNumber.isEmpty) {
-                                    Text("05X XXX XXX")
+                                    Text("5XX XXX XXX")
                                         .foregroundColor(.gray)
                                 }
                                 .onChange(of: authManager.phoneNumber) { value in

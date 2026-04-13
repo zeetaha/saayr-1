@@ -9,6 +9,7 @@ struct LeaderboardFullView: View {
     @State private var isLoading = false
     @State private var allLeaderboardUsers: [LeaderboardUser] = []
     @State private var totalPages = 1
+    @State private var myRank: MyRank? = nil
     
     let itemsPerPage = 20
     
@@ -74,7 +75,7 @@ struct LeaderboardFullView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         ForEach(allLeaderboardUsers) { user in
-                            LeaderboardCard(user: .constant(user))
+                            LeaderboardCard(user: .constant(user), rank: user.rank)
                         }
                         
                         // Load More Button
@@ -91,11 +92,18 @@ struct LeaderboardFullView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 12)
                         }
-                        
+
                         // Loading indicator
                         if isLoading {
                             ProgressView()
                                 .padding()
+                        }
+
+                        // Your Position
+                        if let rank = myRank {
+                            yourPositionCard(rank: rank)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -130,6 +138,7 @@ struct LeaderboardFullView: View {
                         let newUsers = decoded.leaderboard.map { entry in
                             LeaderboardUser(
                                 id: entry.user_id,
+                                rank: entry.rank,
                                 name: entry.full_name ?? "Unknown",
                                 level: entry.level,
                                 points: entry.points,
@@ -152,7 +161,8 @@ struct LeaderboardFullView: View {
                         }
                         
                         currentPage = page
-                        totalPages = ((decoded.total ?? 1)   + itemsPerPage - 1) / itemsPerPage
+                        totalPages = ((decoded.total_entries ?? 1) + itemsPerPage - 1) / itemsPerPage
+                        if page == 1 { myRank = decoded.my_rank }
                         
                     } catch {
                         print("❌ Decoding error (leaderboard):", error)
@@ -166,6 +176,78 @@ struct LeaderboardFullView: View {
     
     private func loadNextPage() {
         fetchLeaderboardPage(page: currentPage + 1)
+    }
+
+    // MARK: - Your Position Card
+
+    private func yourPositionCard(rank: MyRank) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your Position")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.85))
+
+            HStack(spacing: 14) {
+                // Rank badge
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                    Text("#\(rank.rank)")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                }
+
+                // Avatar
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 44, height: 44)
+                    if let urlStr = rank.avatar, let url = URL(string: urlStr) {
+                        AsyncImage(url: url) { img in
+                            img.resizable().scaledToFill()
+                        } placeholder: {
+                            Image(systemName: "person.fill")
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                    } else {
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.white)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(rank.full_name ?? rank.falcon_name ?? "You")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Level \(rank.level)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+
+                Spacer()
+
+                Text("\(rank.points) pts")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.2)))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hex: "#6366F1"), Color(hex: "#8B5CF6")],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+        )
+        .shadow(color: Color(hex: "#6366F1").opacity(0.4), radius: 8, x: 0, y: 4)
     }
 }
 

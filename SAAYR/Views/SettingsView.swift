@@ -4,7 +4,12 @@ struct SettingsView: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var authManager: AuthManager
     @Environment(\.dismiss) var dismiss
-    @State private var showLogoutConfirm = false
+    @State private var activeAlert: SettingsAlert? = nil
+
+    enum SettingsAlert: Identifiable {
+        case language, logout
+        var id: Int { hashValue }
+    }
     @State private var showWeb = false
     @State private var selectedURL: URL?
 
@@ -31,7 +36,7 @@ struct SettingsView: View {
                                     value: languageManager.currentLanguage == .english ? "English" : "العربية",
                                     gradient: [Color.blue, Color.cyan]
                                 ) {
-                                    languageManager.toggleLanguage()
+                                    activeAlert = .language
                                 }
                             }
                             .background(Color(UIColor.secondarySystemGroupedBackground))
@@ -144,19 +149,32 @@ struct SettingsView: View {
             }
         }
         .environment(\.layoutDirection, languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight)
-        .alert(isPresented: $showLogoutConfirm) {
-            Alert(
-                title: Text(languageManager.text("settings.logout")),
-                message: Text(languageManager.text("settings.logoutConfirm")),
-                primaryButton: .destructive(
-                    Text(languageManager.text("settings.logout")),
-                    action: {
-                        authManager.logout()
-                        dismiss()
-                    }
-                ),
-                secondaryButton: .cancel()
-            )
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case .language:
+                let target = languageManager.currentLanguage == .english ? "العربية" : "English"
+                return Alert(
+                    title: Text("Switch Language"),
+                    message: Text("Switch app language to \(target)?"),
+                    primaryButton: .default(Text("Switch")) {
+                        languageManager.toggleLanguage()
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .logout:
+                return Alert(
+                    title: Text(languageManager.text("settings.logout")),
+                    message: Text(languageManager.text("settings.logoutConfirm")),
+                    primaryButton: .destructive(
+                        Text(languageManager.text("settings.logout")),
+                        action: {
+                            authManager.logout()
+                            dismiss()
+                        }
+                    ),
+                    secondaryButton: .cancel()
+                )
+            }
         }
     }
 }

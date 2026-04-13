@@ -330,7 +330,7 @@ struct OTPVerificationView: View {
 
     
     private var maskedPhoneText: String {
-        let masked = phoneNumber.prefix(7) + "**" + phoneNumber.suffix(2)
+        let masked = phoneNumber.prefix(1) + "*******" + phoneNumber.suffix(2)
         return "We sent a 6-digit code to\n+966 \(masked)"
     }
 }

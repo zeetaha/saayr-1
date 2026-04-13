@@ -9,6 +9,7 @@ struct UserData: Codable {
     var totalXP: Int
     var checkInStreak: Int
     var pvpWins: Int
+    var rewards: Int?
     var checkInLogs: [CheckInLog]
     var city: String?       // <-- add this
     var transactions: [Transaction]
@@ -18,25 +19,22 @@ struct UserData: Codable {
     var pvp_enabled : Bool = false
     var pvp_message : String = ""
     
-    var level: Int {
-        LevelSystem.getLevelFromXP(totalXP)
-    }
+    var level: Int?
+    var userLevel: Int?
     
-    var points: Int {
-        LevelSystem.calculatePointsFromXP(totalXP)
-    }
+    var points: Int
+    var pet_stage: Int
     
     var petStage: PetStage {
-        LevelSystem.getPetStage(level)
+        LevelSystem.getPetStage(pet_stage)
     }
     
     var xpProgress: XPProgress {
         LevelSystem.getXPProgressToNextLevel(totalXP)
     }
-    
-    var totalSpent: Double {
-        transactions.reduce(0) { $0 + $1.amount }
-    }
+
+
+
 }
 
 struct CheckInLog: Codable, Identifiable {
@@ -148,7 +146,7 @@ extension UserData {
             city: profile.city,
             transactions: [],
             achievements: [],
-            groups: []
+            groups: [], points: 0, pet_stage: 0
         )
     }
 
@@ -168,7 +166,7 @@ extension UserData {
             achievements: [],
             groups: [],
             pvp_enabled: dashboard.pvp_enabled,
-            pvp_message: dashboard.pvp_message
+            pvp_message: dashboard.pvp_message, level : dashboard.pet_stage, userLevel: dashboard.user_level, points: dashboard.total_xp, pet_stage: dashboard.pet_stage
         )
     }
 }

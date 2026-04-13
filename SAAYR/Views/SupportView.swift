@@ -79,7 +79,7 @@ struct SupportView: View {
                                 icon: "envelope.fill",
                                 title: "Submit Ticket",
                                 titleAr: "إرسال تذكرة",
-                                subtitle: "Frequently Asked Questions",
+                                subtitle: "Create a support ticket",
                                 gradient: [Color.purple.opacity(0.7), Color.indigo.opacity(0.9)]
                             )
                             .onTapGesture {

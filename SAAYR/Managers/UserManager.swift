@@ -23,8 +23,9 @@ class UserManager: ObservableObject {
         city: "",
         transactions: [],
         achievements: [],
-        groups: []
+        groups: [], points: 0, pet_stage: 0
     )
+
 
         private var cancellables = Set<AnyCancellable>()
         
@@ -37,7 +38,8 @@ class UserManager: ObservableObject {
     func updateLeaderboard(from entries: [LeaderboardEntry]) {
         let users: [LeaderboardUser] = entries.map { entry in
             LeaderboardUser(
-                id: entry.user_id,          // stable ID
+                id: entry.user_id,
+                rank: entry.rank,
                 name: entry.full_name ?? "Unknown",
                 level: entry.level,
                 points: entry.points,
@@ -177,24 +179,7 @@ class UserManager: ObservableObject {
         }
     }
 
-        
-        // MARK: - XP & Level Logic
-        func addXP(_ amount: Int, reason: String) {
-            let oldLevel = userData.level
-            userData.totalXP += amount
-            let newLevel = userData.level
-            
-            if newLevel > oldLevel {
-                // Level up & evolution check
-                let oldStage = LevelSystem.getPetStage(oldLevel)
-                let newStage = userData.petStage
-                
-                if oldStage != newStage {
-                    let rewardPoints = LevelSystem.getEvolutionRewardPoints(newStage)
-                    userData.totalXP += rewardPoints * 100
-                }
-            }
-        }
+    
         
         // MARK: - Transactions
         func addTransaction(merchantName: String, amount: Double, category: String, isPartner: Bool, multiplier: Int = 1) {
@@ -215,7 +200,6 @@ class UserManager: ObservableObject {
             )
             
             userData.transactions.insert(transaction, at: 0)
-            addXP(xpAwarded, reason: "Transaction at \(merchantName)")
             
             let pointsAwarded = userData.points - oldPoints
             if pointsAwarded > 0, let index = userData.transactions.firstIndex(where: { $0.id == transaction.id }) {
@@ -236,19 +220,17 @@ class UserManager: ObservableObject {
             )
             userData.checkInLogs.insert(checkIn, at: 0)
             userData.checkInStreak += 1
-            addXP(xpAwarded, reason: "Check-in at \(location)")
         }
         
         // MARK: - PVP
         func startPVPSession() { activePVPSession = true }
         func completePVPSession(won: Bool) {
             activePVPSession = false
-            if won { addXP(LevelSystem.pvpWin, reason: "PVP Victory") }
         }
         
         // MARK: - UI Helpers
         var stageColor: Color {
-            let stage = LevelSystem.getPetStage(userData.level)
+            let stage = LevelSystem.getPetStage(userData.pet_stage)
             let colors = LevelSystem.getStageGradientColors(stage)
             return colors.start
         }
@@ -267,12 +249,15 @@ extension UserData {
             totalXP: dashboard.total_xp,
             checkInStreak: 0,
             pvpWins: 0,
+            rewards : dashboard.rewards,
             checkInLogs: [],
             city: "",
             transactions: [],
             achievements: [],
-            groups: []
+            groups: [],
+            points: dashboard.total_xp, pet_stage: dashboard.pet_stage
         )
+        //petStage = dashboard.pet_stage
     }
     
     var checkInCount: Int { checkInLogs.count }

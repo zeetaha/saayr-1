@@ -18,6 +18,7 @@ struct MyTicketsView: View {
     @State private var selectedTicket: Ticket? = nil  // For fullScreenCover
     @State private var isLoading: Bool = false
     @State private var page: Int = 1
+    @State private var showSubmitTicket: Bool = false
 
     var body: some View {
         NavigationView{
@@ -35,9 +36,34 @@ struct MyTicketsView: View {
                             ProgressView()
                                 .padding()
                         } else if tickets.isEmpty {
-                            Text("No tickets")
-                                .foregroundColor(.secondary)
-                                .padding()
+                            VStack(spacing: 20) {
+                                Image(systemName: "ticket.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(Color.purple)
+                                    .padding(.top, 40)
+
+                                Text("No tickets yet")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .multilineTextAlignment(.center)
+
+                                Text("You don’t have any support requests yet. Submit a ticket and our team will help you with any issue.")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 30)
+
+                                Button(action: { showSubmitTicket = true }) {
+                                    Text("Submit a Ticket")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding()
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.purple)
+                                        .cornerRadius(14)
+                                }
+                                .padding(.horizontal, 40)
+                            }
+                            .padding(.vertical, 40)
                         } else {
                             ForEach(tickets) { ticket in
                                 Button {
@@ -71,6 +97,15 @@ struct MyTicketsView: View {
             .fullScreenCover(item: $selectedTicket) { ticket in
                 TicketDetailView(ticket: ticket)
                     .environmentObject(languageManager)
+            }
+            .fullScreenCover(isPresented: $showSubmitTicket) {
+                SubmitTicketView()
+                    .environmentObject(languageManager)
+            }
+            .onChange(of: showSubmitTicket) { isPresented in
+                if !isPresented {
+                    fetchTickets()
+                }
             }
             .onAppear {
                 fetchTickets()
