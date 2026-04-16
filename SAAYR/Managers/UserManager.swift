@@ -6,6 +6,7 @@ class UserManager: ObservableObject {
     @Published var activePVPSession = false
     @Published var activeMatchStatus: Bool = false
     @Published var activeMatchData: FullMatchData? = nil
+    @Published var isLoadingData: Bool = true
     
     // MARK: - Published properties
     @Published var leaderboardUsers: [LeaderboardUser] = []
@@ -62,20 +63,20 @@ class UserManager: ObservableObject {
         // MARK: - API Fetching
     // MARK: - Fetch All User Data
     func fetchAllUserData() {
+        DispatchQueue.main.async { self.isLoadingData = true }
         // First, fetch profile
         fetchProfile { [weak self] profile in
             guard let self = self, let profile = profile else { return }
-
-            // Update userData with profile info
-            self.userData = UserData.fromProfile(profile)
 
             // Then fetch dashboard
             self.fetchDashboard { dashboard in
                 guard let dashboard = dashboard else { return }
 
-                // Merge dashboard info into userData
-                self.userData = UserData.fromProfileAndDashboard(profile: profile, dashboard: dashboard)
-
+                // Update userData only once both profile and dashboard are ready
+                DispatchQueue.main.async {
+                    self.userData = UserData.fromProfileAndDashboard(profile: profile, dashboard: dashboard)
+                    self.isLoadingData = false
+                }
             }
             
             self.fetchLeaderboard { leaderboardResponse in

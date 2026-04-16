@@ -366,7 +366,7 @@ class ServiceModel {
                 headers["Authorization"] = "Bearer \(token)"
         }
         headers["Language-Code"] = UserModel.shared.languageCode
-        headers["App-Version"] = "1.0.0"
+        headers["App-Version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         headers["Latitude"] = UserModel.shared.latitude
         headers["Longitude"] = UserModel.shared.longitude
         headers["Country-Code"] = UserModel.shared.countryCode

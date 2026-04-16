@@ -36,6 +36,13 @@ struct SAAYRApp: App {
                 }
             }
             .preferredColorScheme(.light)
+            .onAppear {
+                // If the app launches already authenticated (token persisted),
+                // start HealthKit tracking immediately.
+                if authManager.authState == .authenticated {
+                    setupHealthKit()
+                }
+            }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active && !trackingRequested {
@@ -44,6 +51,24 @@ struct SAAYRApp: App {
                     requestTrackingPermission()
                 }
             }
+        }
+        .onChange(of: authManager.authState) { state in
+            if state == .authenticated {
+                setupHealthKit()
+            } else {
+                // User logged out — stop receiving HealthKit background wakes
+                HealthKitManager.shared.stopBackgroundDelivery()
+            }
+        }
+    }
+
+    /// Request HealthKit authorization then enable background step delivery.
+    private func setupHealthKit() {
+        HealthKitManager.shared.requestAuthorization { granted in
+            guard granted else { return }
+            HealthKitManager.shared.setupBackgroundDelivery()
+            // Send today's steps immediately on first open
+            HealthKitManager.shared.fetchAndSendTodaySensorSteps()
         }
     }
 

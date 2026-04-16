@@ -34,6 +34,9 @@ struct HomeView: View {
                     VStack(spacing: 24) {
                         // Center content and limit max width for iPad
                         VStack(spacing: 24) {
+                            if userManager.isLoadingData {
+                                HomeSkeletonView()
+                            } else {
                             greetingSection
                             PetDisplayCard(
                                 petName: userManager.userData.petName ?? "",
@@ -42,7 +45,7 @@ struct HomeView: View {
                                 xpProgress: userManager.userData.xpProgress
                             )
                             .padding(.horizontal)
-                            
+
                             statsGrid
                            PVPBattleCard(isLoading: isCheckingPVP) {
                                guard userManager.userData.pvp_enabled, !isCheckingPVP else { return }
@@ -62,6 +65,7 @@ struct HomeView: View {
                                }
                            }
                             leaderboardSection
+                            } // end if isLoadingData
                         }
                         .frame(maxWidth: 700) // Limit width on iPad
                         .padding(.horizontal)
@@ -588,6 +592,131 @@ struct ActivePVPBanner: View {
         .shadow(color: Color.orange.opacity(0.4), radius: 8, x: 0, y: 4)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Shimmer
+
+struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = -1.5
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0),   location: 0),
+                            .init(color: Color.white.opacity(0.55), location: 0.45),
+                            .init(color: Color.white.opacity(0),   location: 1)
+                        ],
+                        startPoint: UnitPoint(x: phase,     y: 0.5),
+                        endPoint:   UnitPoint(x: phase + 1, y: 0.5)
+                    )
+                    .blendMode(.screen)
+                }
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                    phase = 1.5
+                }
+            }
+    }
+}
+
+extension View {
+    func shimmer() -> some View { modifier(ShimmerModifier()) }
+}
+
+// Reusable grey pill used in skeletons
+private struct ShimmerBlock: View {
+    var width: CGFloat? = nil
+    var height: CGFloat = 16
+    var cornerRadius: CGFloat = 8
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(Color.gray.opacity(0.15))
+            .frame(width: width, height: height)
+            .shimmer()
+    }
+}
+
+// MARK: - Home Skeleton
+
+struct HomeSkeletonView: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            // Greeting skeleton
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    ShimmerBlock(width: 110, height: 13)
+                    ShimmerBlock(width: 170, height: 22)
+                }
+                Spacer()
+                ShimmerBlock(width: 80, height: 36, cornerRadius: 20)
+            }
+            .padding(.top, 16)
+
+            // Pet card skeleton
+            VStack(spacing: 16) {
+                ShimmerBlock(width: 120, height: 120, cornerRadius: 60)
+                ShimmerBlock(width: 140, height: 20)
+                ShimmerBlock(width: 100, height: 14)
+                ShimmerBlock(height: 12, cornerRadius: 6)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(24)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Color.gray.opacity(0.07)))
+            .padding(.horizontal)
+
+            // Stats grid skeleton
+            HStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { _ in
+                    VStack(spacing: 8) {
+                        ShimmerBlock(width: 28, height: 28, cornerRadius: 6)
+                        ShimmerBlock(width: 50, height: 20)
+                        ShimmerBlock(width: 60, height: 12)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.gray.opacity(0.07)))
+                }
+            }
+            .padding(.vertical)
+
+            // PVP card skeleton
+            HStack(spacing: 16) {
+                ShimmerBlock(width: 52, height: 52, cornerRadius: 14)
+                VStack(alignment: .leading, spacing: 8) {
+                    ShimmerBlock(width: 100, height: 18)
+                    ShimmerBlock(width: 150, height: 13)
+                }
+                Spacer()
+            }
+            .padding(20)
+            .background(RoundedRectangle(cornerRadius: 24).fill(Color.gray.opacity(0.1)))
+
+            // Leaderboard skeleton
+            VStack(alignment: .leading, spacing: 12) {
+                ShimmerBlock(width: 140, height: 20)
+                ShimmerBlock(width: 60, height: 13)
+                ForEach(0..<3, id: \.self) { _ in
+                    HStack(spacing: 12) {
+                        ShimmerBlock(width: 44, height: 44, cornerRadius: 22)
+                        VStack(alignment: .leading, spacing: 6) {
+                            ShimmerBlock(width: 120, height: 15)
+                            ShimmerBlock(width: 70, height: 12)
+                        }
+                        Spacer()
+                        ShimmerBlock(width: 60, height: 28, cornerRadius: 14)
+                    }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.gray.opacity(0.07)))
+                }
+            }
+        }
+        .padding(.horizontal)
     }
 }
 
