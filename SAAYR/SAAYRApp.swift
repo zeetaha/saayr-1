@@ -45,11 +45,18 @@ struct SAAYRApp: App {
             }
         }
         .onChange(of: scenePhase) { phase in
-            if phase == .active && !trackingRequested {
-                trackingRequested = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    requestTrackingPermission()
+            if phase == .active {
+                if !trackingRequested {
+                    trackingRequested = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        requestTrackingPermission()
+                    }
                 }
+                if authManager.authState == .authenticated {
+                    HealthKitManager.shared.startLiveTracking()
+                }
+            } else if phase == .background || phase == .inactive {
+                HealthKitManager.shared.stopLiveTracking()
             }
         }
         .onChange(of: authManager.authState) { state in

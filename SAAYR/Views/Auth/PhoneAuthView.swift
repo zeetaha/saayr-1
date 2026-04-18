@@ -189,6 +189,11 @@ struct PhoneAuthView: View {
         .sheet(item: $selectedPage) { page in
             SafariView(url: page.url)
         }
+        .alert("Account Blocked", isPresented: $authManager.isBlockedAlert) {
+            Button("OK", role: .cancel) { authManager.isBlockedAlert = false }
+        } message: {
+            Text(authManager.blockedMessage)
+        }
 
 
         

@@ -9,19 +9,36 @@ import Foundation
 import Alamofire
 import UIKit
 
+extension NSNotification.Name {
+    static let userAccountBlocked = NSNotification.Name("userAccountBlocked")
+}
 
 class ServiceModel {
-    
+
     // Singleton instance for easy access throughout the app
     static let shared = ServiceModel()
-    
+
     private init() { }
-    
+
+    /// Posts `userAccountBlocked` if the response is a 403 with the blocked-account detail.
+    private func checkForBlockedAccount(response: AFDataResponse<Data>) {
+        guard response.response?.statusCode == 403,
+              let data = response.data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let detail = json["detail"] as? String,
+              detail.lowercased().contains("blocked")
+        else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .userAccountBlocked, object: detail)
+        }
+    }
+
     // MARK: - GET Request
     func getRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
         AF.request(endpoint, method: .get, parameters: parameters, encoding: URLEncoding.default, headers: getHeader())
             .validate()
-            .responseData { response in
+            .responseData { [weak self] response in
+                self?.checkForBlockedAccount(response: response)
                 switch response.result {
                 case .success(let data):
                     completion(.success(data))
@@ -30,14 +47,13 @@ class ServiceModel {
                 }
             }
     }
-    
+
     // MARK: - POST Request
-    func postRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void)
-    
-    {
+    func postRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
         AF.request(endpoint, method: .post, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
             .validate()
-            .responseData { response in
+            .responseData { [weak self] response in
+                self?.checkForBlockedAccount(response: response)
                 switch response.result {
                 case .success(let data):
                     completion(.success(data))

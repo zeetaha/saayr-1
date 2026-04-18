@@ -24,6 +24,8 @@ class AuthManager: ObservableObject {
     @Published var otpCode: String = ""
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var isBlockedAlert: Bool = false
+    @Published var blockedMessage: String = "Your account has been blocked. Please contact support."
     
     // Temporary storage for profile setup
     @Published var tempFullName: String = ""
@@ -43,6 +45,18 @@ class AuthManager: ObservableObject {
             self.authState = .phoneEntry
         } else {
             self.authState = .onboarding
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .userAccountBlocked,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            self.logout()
+            self.blockedMessage = notification.object as? String
+                ?? "Your account has been blocked. Please contact support."
+            self.isBlockedAlert = true
         }
     }
     

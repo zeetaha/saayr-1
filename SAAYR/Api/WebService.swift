@@ -8,54 +8,74 @@
 import Foundation
 
 class WebService {
-    
-//    static var baseUrl = "http://100.27.214.146:8001/"
-    
 
-    static var baseUrl = "https://api.saayr.sa/api/v1/"
+    // MARK: - Base URLs
+    // To switch environments, select the "Staging" scheme in Xcode.
+    // That scheme uses the "Staging" build configuration which defines
+    // the STAGING Swift Active Compilation Condition.
 
-    static var sendOtp = baseUrl + "auth/send-otp"
-    static var verifyOtp = baseUrl + "auth/verify-otp"
-    static var completeSignup = baseUrl + "auth/complete-signup"
-    static var addFalconName = baseUrl + "auth/add-falcon-name"
-    static var login = baseUrl + "auth/login"
-    static var forgotPasscode = baseUrl + "auth/forgot-passcode"
-    static var resetPasscode = baseUrl + "auth/reset-passcode"
-    static var nearBy = baseUrl + "locations/nearby"
+    #if STAGING
+    static let baseUrl   = "https://api-staging.saayr.sa/api/v1/"
+    static let portalUrl = "https://portal-staging.saayr.sa/"
+    #else
+    static let baseUrl   = "https://api.saayr.sa/api/v1/"
+    static let portalUrl = "https://portal.saayr.sa/"
+    #endif
+
+    // MARK: - Auth
+    static var sendOtp         = baseUrl + "auth/send-otp"
+    static var verifyOtp       = baseUrl + "auth/verify-otp"
+    static var completeSignup  = baseUrl + "auth/complete-signup"
+    static var addFalconName   = baseUrl + "auth/add-falcon-name"
+    static var login           = baseUrl + "auth/login"
+    static var forgotPasscode  = baseUrl + "auth/forgot-passcode"
+    static var resetPasscode   = baseUrl + "auth/reset-passcode"
+
+    // MARK: - Locations
+    static var nearBy  = baseUrl + "locations/nearby"
     static var checkIn = baseUrl + "locations/check-in"
-    static var profile = baseUrl + "user/profile"
-    static var dashboard  = baseUrl + "user/dashboard"
-    static var leaderboard = baseUrl + "user/leaderboard"
+
+    // MARK: - User
+    static var profile       = baseUrl + "user/profile"
+    static var dashboard     = baseUrl + "user/dashboard"
+    static var leaderboard   = baseUrl + "user/leaderboard"
     static var updateProfile = baseUrl + "user/profile"
     static var deleteAccount = baseUrl + "user/account"
+
+    // MARK: - Support Tickets
     static var supportUnreadCount = baseUrl + "tickets/my-tickets/unread-count"
-    static var createTicket = baseUrl + "tickets/create"
-    static var uploadImage = baseUrl + "tickets/upload-image"
-    static var myTickets = baseUrl + "tickets/my-tickets"
+    static var createTicket       = baseUrl + "tickets/create"
+    static var uploadImage        = baseUrl + "tickets/upload-image"
+    static var myTickets          = baseUrl + "tickets/my-tickets"
+
+    // MARK: - PVP
     static var pvpPaymentWebview = baseUrl + "user/pvp/payment-webview"
+    static var myMatch           = baseUrl + "user/pvp/my-match"
+    static var pvpInfo           = baseUrl + "user/pvp/info"
+    static var pvpMatchmake      = baseUrl + "user/pvp/payment/"   // append: {paymentId}/matchmake
+    static var pvpMatchState     = baseUrl + "user/pvp/match/"     // append: {matchId}/state
+    static var pvpCancelMatch    = baseUrl + "user/pvp/match/cancel"
+
+    // MARK: - Rewards
     static var rewardsCatalog = baseUrl + "rewards/catalog"
-    static var redeemReward = baseUrl + "rewards/redeem"
-    static var myMatch = baseUrl + "user/pvp/my-match"
-    static var pvpInfo = baseUrl + "user/pvp/info"
-    static var pvpMatchmake = baseUrl + "user/pvp/payment/" // append: {paymentId}/matchmake
-    static var pvpMatchState = baseUrl + "user/pvp/match/" // append: {matchId}/state
-    static var pvpCancelMatch = baseUrl + "user/pvp/match/cancel"
-    static var challenges = baseUrl + "missions/challenges"
-    static var recordSteps = baseUrl + "record-steps"
-   
-    
-//#if DEBUG
-//    static var cardKey = "pk_sbox_nzv4ul6fifmkfwnx62gxrydiaqe"
-//    static var baseUrl = "http://100.27.214.146:8003/"
-//#else
-//    static var cardKey = "pk_sbox_nzv4ul6fifmkfwnx62gxrydiaqe"
-//    static var baseUrl = "https://lechefapi.orderupp.io/"
-//#endif
-    
-    
+    static var redeemReward   = baseUrl + "rewards/redeem"
+
+    // MARK: - Challenges & Health
+    static var challenges   = baseUrl + "missions/challenges"
+    static var recordSteps  = baseUrl + "record-steps"
+
+    // MARK: - Payment keys
     static var cvvToken = ""
     static var moyasarPublishableKey = "pk_test_zh19C8QcQyT2n4mu9kVHtzR9aFhotACBbs7XJcN2"
-    //MOYASAR_SECRET_KEY=sk_test_XPLmF2jZDZogqnTePhXpzbZPLB9PNUYDroD67nW4"
-    static var applePayMerchantId = "merchant.com.saayr.app"
+    static var applePayMerchantId    = "merchant.com.saayr.app"
 
+    // MARK: - Convenience
+    /// Which environment is active — useful for debug banners or logging.
+    static var environmentName: String {
+        #if STAGING
+        return "Staging"
+        #else
+        return "Production"
+        #endif
+    }
 }
