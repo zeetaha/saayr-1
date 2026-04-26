@@ -42,7 +42,8 @@ struct HomeView: View {
                                 petName: userManager.userData.petName ?? "",
                                 level: userManager.userData.level ?? 0,
                                 stage: userManager.userData.petStage,
-                                xpProgress: userManager.userData.xpProgress
+                                xpProgress: userManager.userData.current_percentage ?? 0.0,
+                                progessText: userManager.userData.text_of_progress
                             )
                             .padding(.horizontal)
 
@@ -360,7 +361,9 @@ struct PetDisplayCard: View {
     let petName: String
     let level: Int?
     let stage: PetStage
-    let xpProgress: XPProgress
+    let xpProgress: Double
+    let progessText: String
+    
     @EnvironmentObject var languageManager: LanguageManager
     
     var body: some View {
@@ -368,7 +371,7 @@ struct PetDisplayCard: View {
             // Circular progress ring with pet emoji
             ZStack {
                 CircularProgressRing(
-                    progress: xpProgress.progressPercentage,
+                    progress: xpProgress,
                     size: 120,
                     lineWidth: 8
                 )
@@ -389,11 +392,11 @@ struct PetDisplayCard: View {
             // XP Progress Bar
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("\(xpProgress.currentLevelXP) / \(xpProgress.nextLevelXP) XP")
+                    Text("\(progessText)")
                         .font(.system(size: 12))
                         .foregroundColor(.black.opacity(0.9))
                     Spacer()
-                    Text("\(Int(xpProgress.progressPercentage * 100))%")
+                    Text("\(Int(xpProgress))%")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.black)
                 }
@@ -407,7 +410,7 @@ struct PetDisplayCard: View {
                                 colors: [Color.blue.opacity(0.7), Color.blue],
                                 startPoint: .leading,
                                 endPoint: .trailing))
-                            .frame(width: geometry.size.width * xpProgress.progressPercentage, height: 12)
+                            .frame(width: geometry.size.width * (xpProgress/100), height: 12)
                     }
                 }
                 .frame(height: 12)

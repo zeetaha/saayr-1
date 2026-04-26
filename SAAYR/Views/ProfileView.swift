@@ -1,4 +1,5 @@
 import SwiftUI
+import Alamofire
 
 struct ProfileView: View {
     @EnvironmentObject var userManager: UserManager
@@ -85,9 +86,9 @@ struct ProfileView: View {
                             
                             // MARK: Stats
                             HStack(spacing: 12) {
-                                StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInStreak)", label: "Check-ins")
-                                StatCardProfile(icon: "bolt.fill", value: "\(userManager.userData.pvpWins)", label: "Battles")
-                                StatCardProfile(icon: "gift.fill", value: "\(userManager.userData.rewards ?? 0)", label: "Rewards")
+                                StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInStreak)", label: "Completed check-ins")
+                                StatCardProfile(icon: "bolt.fill", value: "\(userManager.userData.pvpWins)", label: "PVP wins")
+                                StatCardProfile(icon: "gift.fill", value: "\(userManager.userData.rewards ?? 0)", label: "Rewards claimed")
                             }
                         }
                         .padding()
@@ -311,19 +312,58 @@ struct EditableInfoCard: View {
 
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showValidation = false
+
+    private var trimmedName: String { fullName.trimmingCharacters(in: .whitespaces) }
+
+    private var nameError: String? {
+        guard showValidation else { return nil }
+        if trimmedName.isEmpty { return "Full name is required." }
+        if trimmedName.count < 2  { return "Name must be at least 2 characters." }
+        return nil
+    }
+
+    private var emailError: String? {
+        guard showValidation else { return nil }
+        let trimmed = email.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return nil } // optional
+        if !isValidEmail(trimmed) { return "Please enter a valid email." }
+        return nil
+    }
+
+    private func isValidEmail(_ value: String) -> Bool {
+        let pred = NSPredicate(format: "SELF MATCHES %@",
+                               "[A-Z0-9a-z._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}")
+        return pred.evaluate(with: value)
+    }
+
+    private func sanitiseName(_ input: String) -> String {
+        let lettersAndSpaces = input.unicodeScalars.filter {
+            CharacterSet.letters.union(.init(charactersIn: " ")).contains($0)
+        }
+        var result = String(String.UnicodeScalarView(lettersAndSpaces))
+        while result.contains("  ") {
+            result = result.replacingOccurrences(of: "  ", with: " ")
+        }
+        if result.hasPrefix(" ") { result.removeFirst() }
+        return result
+    }
 
     var body: some View {
         VStack(spacing: 16) {
             HStack {
                 Text("Personal Information")
                     .font(.headline)
-
                 Spacer()
-
                 Button {
                     if isEditing {
-                        updateProfile()   // 🔥 Call API on Save
+                        withAnimation { showValidation = true }
+                        guard nameError == nil, emailError == nil,
+                              !trimmedName.isEmpty else { return }
+                        updateProfile()
                     } else {
+                        showValidation = false
+                        errorMessage = nil
                         isEditing = true
                     }
                 } label: {
@@ -334,22 +374,58 @@ struct EditableInfoCard: View {
                 .disabled(isLoading)
             }
 
-            TextField("Full Name", text: $fullName)
-                .textFieldStyle(.roundedBorder)
-                .disabled(!isEditing)
+            // Full Name field
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Full Name", text: $fullName)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                    .autocapitalization(.words)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(nameError != nil ? Color.red : Color.clear, lineWidth: 1.5)
+                    )
+                    .onChange(of: fullName) { value in
+                        let clean = sanitiseName(value)
+                        if clean != value { fullName = clean }
+                        errorMessage = nil
+                    }
 
-            TextField("Email", text: $email)
-                .textFieldStyle(.roundedBorder)
-                .disabled(!isEditing)
+                if let err = nameError {
+                    Label(err, systemImage: "exclamationmark.circle.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
+
+            // Email field
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Email (optional)", text: $email)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                    .keyboardType(.emailAddress)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(emailError != nil ? Color.red : Color.clear, lineWidth: 1.5)
+                    )
+                    .onChange(of: email) { _ in errorMessage = nil }
+
+                if let err = emailError {
+                    Label(err, systemImage: "exclamationmark.circle.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
 
             TextField("Pet Name", text: .constant(petName))
                 .textFieldStyle(.roundedBorder)
                 .disabled(true)
 
             if let errorMessage {
-                Text(errorMessage)
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.red)
-                    .font(.caption)
             }
         }
         .padding()
@@ -357,41 +433,36 @@ struct EditableInfoCard: View {
         .cornerRadius(20)
         .shadow(radius: 6)
     }
-    
+
     private func updateProfile() {
         isLoading = true
         errorMessage = nil
 
-        let body: [String: Any] = [
-            "full_name": fullName,
-            "email": email,
-            "avatar": ""
-        ]
+        var body: [String: Any] = ["full_name": trimmedName, "avatar": ""]
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
+        if !trimmedEmail.isEmpty { body["email"] = trimmedEmail }
 
-        ServiceModel.shared.putRequest(
-            endpoint: WebService.updateProfile,
-            parameters: body
-        ) { result in
-
+        ServiceModel.shared.putRequest(endpoint: WebService.updateProfile, parameters: body) { result in
             DispatchQueue.main.async {
                 self.isLoading = false
-
                 switch result {
                 case .success(let data):
-                    // Optional: decode response if needed
                     print("Profile updated:", String(data: data, encoding: .utf8) ?? "")
-
-                    withAnimation {
-                        self.isEditing = false   // ✅ Exit edit mode
-                    }
+                    withAnimation { self.isEditing = false }
 
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                    switch error.responseCode {
+                    case 422:
+                        self.errorMessage = "Invalid input. Please check your name and email."
+                    case 400:
+                        self.errorMessage = "Bad request. Please review your information."
+                    default:
+                        self.errorMessage = "Failed to update profile. Please try again."
+                    }
                 }
             }
         }
     }
-
 }
 
 

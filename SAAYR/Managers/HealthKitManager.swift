@@ -75,7 +75,7 @@ final class HealthKitManager: ObservableObject {
             if secondsSinceSync >= 60 && stepDelta > 0 {
                 self.lastSyncedSteps = steps
                 self.lastSyncDate    = now
-                self.sendStepsToAPI(steps: steps, date: startOfDay)
+                self.sendStepsToAPI(steps: steps, date: startOfDay, source: "pedometer")
             }
         }
 
@@ -170,7 +170,7 @@ final class HealthKitManager: ObservableObject {
 
     /// Uses URLSession directly so this works inside HealthKit's short
     /// background execution window (Alamofire sessions may be suspended).
-    private func sendStepsToAPI(steps: Int, date: Date, completion: (() -> Void)? = nil) {
+    private func sendStepsToAPI(steps: Int, date: Date, source: String = "healthkit", completion: (() -> Void)? = nil) {
         guard
             let token = UserModel.shared.user?.accessToken,
             !token.isEmpty
@@ -186,12 +186,19 @@ final class HealthKitManager: ObservableObject {
         }
 
         let iso       = ISO8601DateFormatter()
+        let now       = Date()
         let dateStr   = String(iso.string(from: date).prefix(10)) // "2026-04-18"
+        let cal     = Calendar.current
+        let hour    = cal.component(.hour,   from: now) // 0–23
+        let minute  = cal.component(.minute, from: now) // 0–59
 
         let body: [String: Any] = [
             "steps":       steps,
             "date":        dateStr,
-            "recorded_at": iso.string(from: Date())
+            "hour":        hour,
+            "minute":      minute,
+            "recorded_at": iso.string(from: now),
+            "source":      source   // "pedometer" = live (CMPedometer) | "healthkit" = background batch
         ]
 
         guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {

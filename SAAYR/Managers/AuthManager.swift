@@ -103,14 +103,18 @@ class AuthManager: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                    // 403 = blocked account — the ServiceModel notification already
+                    // triggers isBlockedAlert, so don't overwrite with Alamofire's
+                    // generic "Response status code was unacceptable: 403" text.
+                    if error.responseCode == 403 { return }
+                    self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
                     print("❌ API Error:", error.localizedDescription)
                 }
             }
         }
     }
-    
-    
+
+
     func verifyOTP(otp: String, onResult: @escaping (_ isNewUser: Bool) -> Void) {
         isLoading = true
         errorMessage = nil
@@ -338,7 +342,10 @@ class AuthManager: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                    self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+
+                    if error.responseCode == 403 { return }
+                    print("❌ API Error:", error.localizedDescription)
                 }
             }
         }
@@ -425,23 +432,18 @@ class AuthManager: ObservableObject {
     
     func completeProfileSetup() {
         guard validateProfileData() else {
-            errorMessage = "Please fill in all fields"
+            errorMessage = "Please fill in all required fields"
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
-        // Save profile data
+
         UserDefaults.standard.set(tempFullName, forKey: "fullName")
-        UserDefaults.standard.set(tempEmail, forKey: "email")
-        UserDefaults.standard.set(true, forKey: "hasProfile")
-        
-        DispatchQueue.main.async {
-            self.isLoading = false
-            // Complete authentication
-            self.sendPinFlow()
-        }
+        UserDefaults.standard.set(tempEmail,    forKey: "email")
+        UserDefaults.standard.set(true,         forKey: "hasProfile")
+
+        sendPinFlow()
     }
     
     func completeSetup() {
@@ -492,9 +494,13 @@ class AuthManager: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
-                    if let errorCode = error.responseCode , errorCode == 400 {
-                        self.errorMessage =  "Falcon name already taken"
+                    switch error.responseCode {
+                    case 400:
+                        self.errorMessage = "Falcon name already taken. Please try another."
+                    case 422:
+                        self.errorMessage = "Falcon name is invalid. Use letters and numbers only."
+                    default:
+                        self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
                     }
                     print("❌ API Error:", error.localizedDescription)
                 }
@@ -570,6 +576,8 @@ class AuthManager: ObservableObject {
                 return "Invalid OTP. Please check your input."
             case 401:
                 return "Unauthorized. Please try again."
+            case 403:
+                return "Your account has been blocked. Please contact support Info@saayr.sa"
             case 422:
                 return "Invalid OTP or phone number. Please try again."
             case 429:

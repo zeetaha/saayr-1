@@ -24,7 +24,7 @@ class UserManager: ObservableObject {
         city: "",
         transactions: [],
         achievements: [],
-        groups: [], points: 0, pet_stage: 0
+        groups: [], points: 0, pet_stage: 0, text_of_progress: "",current_percentage: 0.0
     )
 
 
@@ -256,7 +256,7 @@ extension UserData {
             transactions: [],
             achievements: [],
             groups: [],
-            points: dashboard.total_xp, pet_stage: dashboard.pet_stage
+            points: dashboard.total_xp, pet_stage: dashboard.pet_stage, text_of_progress: dashboard.text_of_progress ?? "",current_percentage: dashboard.current_percentage ?? 0.0
         )
         //petStage = dashboard.pet_stage
     }

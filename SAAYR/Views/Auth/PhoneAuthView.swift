@@ -14,6 +14,11 @@ struct PhoneAuthView: View {
     
     @State private var showWeb = false
     @State private var selectedPage: WebPage? = nil
+    @State private var phoneFieldTouched = false
+
+    private var showPhoneError: Bool {
+        phoneFieldTouched && authManager.phoneNumber.count < 9
+    }
 
 
     
@@ -86,33 +91,59 @@ struct PhoneAuthView: View {
                     
                     // ✅ Glassmorphic Card
                     VStack(spacing: 24) {
-                        HStack {
-                            Text("+966")
-                                .fontWeight(.bold)
-                                .foregroundColor(Color(hex: "#3B82F6"))
-                            
-                            // using custom placeholder modifier so we can control its color
-                            TextField("", text: $authManager.phoneNumber)
-                                .keyboardType(.numberPad)
-                                .focused($isPhoneFocused)
-                                .foregroundColor(.black) // visible in both modes
-                                .placeholder(when: authManager.phoneNumber.isEmpty) {
-                                    Text("5XX XXX XXX")
-                                        .foregroundColor(.gray)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("+966")
+                                    .fontWeight(.bold)
+                                    .foregroundColor(Color(hex: "#3B82F6"))
+
+                                TextField("", text: $authManager.phoneNumber)
+                                    .keyboardType(.numberPad)
+                                    .focused($isPhoneFocused)
+                                    .foregroundColor(.black)
+                                    .placeholder(when: authManager.phoneNumber.isEmpty) {
+                                        Text("5XX XXX XXX")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .onChange(of: authManager.phoneNumber) { value in
+                                        let digits = value.filter { $0.isNumber }
+                                        // First digit must be 5 — drop any leading non-5 digits
+                                        let valid = digits.drop(while: { $0 != "5" })
+                                        authManager.phoneNumber = String(valid.prefix(9))
+                                        phoneFieldTouched = true
+                                        // Clear error once 9 digits are entered
+                                        if authManager.phoneNumber.count == 9 {
+                                            phoneFieldTouched = false
+                                        }
+                                    }
+                            }
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(
+                                        showPhoneError ? Color.red : Color(hex: "#3B82F6"),
+                                        lineWidth: showPhoneError ? 1.5 : 1
+                                    )
+                            )
+
+                            if showPhoneError {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 12))
+                                    Text(languageManager.currentLanguage == .english
+                                         ? "Please enter a 9-digit mobile number."
+                                         : "يرجى إدخال رقم جوال مكون من 9 أرقام.")
+                                        .font(.system(size: 12, weight: .medium))
                                 }
-                                .onChange(of: authManager.phoneNumber) { value in
-                                    let filtered = value.filter { $0.isNumber }
-                                    authManager.phoneNumber = String(filtered.prefix(9))
-                                }
+                                .foregroundColor(.red)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
                         }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(hex: "#3B82F6"), lineWidth: 1)
-                        )
                         
                         Button {
                             isPhoneFocused = false
+                            phoneFieldTouched = true
+                            guard authManager.phoneNumber.count == 9 else { return }
                             authManager.sendOTP()
                         } label: {
                             if authManager.isLoading {
@@ -132,8 +163,8 @@ struct PhoneAuthView: View {
                         .background(Color(hex: "#3B82F6"))
                         .foregroundColor(.white)
                         .cornerRadius(16)
-                        .disabled(authManager.phoneNumber.count < 9 || authManager.isLoading)
-                        .opacity(authManager.phoneNumber.count < 9 ? 0.6 : 1)
+                        .disabled(authManager.isLoading)
+                        .opacity(authManager.isLoading ? 0.6 : 1)
                     }
                     .padding(24)
                     .background(Color.white.opacity(0.9))
@@ -185,6 +216,11 @@ struct PhoneAuthView: View {
         }
         .onAppear {
             isPhoneFocused = true
+        }
+        .onChange(of: isPhoneFocused) { focused in
+            if !focused && !authManager.phoneNumber.isEmpty {
+                phoneFieldTouched = true
+            }
         }
         .sheet(item: $selectedPage) { page in
             SafariView(url: page.url)

@@ -25,6 +25,9 @@ struct UserData: Codable {
     var points: Int
     var pet_stage: Int
     
+    var text_of_progress : String
+    var current_percentage : Double?
+    
     var petStage: PetStage {
         LevelSystem.getPetStage(pet_stage)
     }
@@ -142,11 +145,12 @@ extension UserData {
             totalXP: profile.totalXP,
             checkInStreak: 0,
             pvpWins:0, // Default or map if API provides
+            rewards: profile.rewards,
             checkInLogs: [],
             city: profile.city,
             transactions: [],
             achievements: [],
-            groups: [], points: 0, pet_stage: 0
+            groups: [], points: 0, pet_stage: 0,text_of_progress: "",current_percentage: 0.0
         )
     }
 
@@ -160,13 +164,14 @@ extension UserData {
             totalXP: dashboard.total_xp,
             checkInStreak: dashboard.total_checkins,
             pvpWins:dashboard.pvp_wins,
+            rewards: dashboard.rewards,
             checkInLogs: [],
             city: profile.city,
             transactions: [],
             achievements: [],
             groups: [],
             pvp_enabled: dashboard.pvp_enabled,
-            pvp_message: dashboard.pvp_message, level : dashboard.pet_stage, userLevel: dashboard.user_level, points: dashboard.total_xp, pet_stage: dashboard.pet_stage
+            pvp_message: dashboard.pvp_message, level : dashboard.pet_stage, userLevel: dashboard.user_level, points: dashboard.total_xp, pet_stage: dashboard.pet_stage, text_of_progress: dashboard.text_of_progress ?? "",current_percentage: dashboard.current_percentage ?? 0.0
         )
     }
 }

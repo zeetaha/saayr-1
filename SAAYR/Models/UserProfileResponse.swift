@@ -17,6 +17,7 @@ struct UserProfileResponse: Decodable {
     let totalXP: Int
     let petStage: Int
     let referralCode: String
+    let rewards: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,6 +30,7 @@ struct UserProfileResponse: Decodable {
         case totalXP = "total_xp"
         case petStage = "pet_stage"
         case referralCode = "referral_code"
+        case rewards = "rewards"
     }
 }
 
@@ -45,6 +47,8 @@ struct DashboardResponse: Decodable {
     let pvp_enabled: Bool
     let pvp_message: String
     let rewards: Int?
+    let text_of_progress: String?
+    let current_percentage: Double?
 }
 
 struct LeaderboardEntry: Decodable, Identifiable {
