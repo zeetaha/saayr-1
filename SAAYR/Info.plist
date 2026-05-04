@@ -20,7 +20,7 @@
 
 	<!-- HealthKit purpose strings (required by App Store even if only reading) -->
 	<key>NSHealthShareUsageDescription</key>
-	<string>SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.</string>
+	<string>SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.</string>
 

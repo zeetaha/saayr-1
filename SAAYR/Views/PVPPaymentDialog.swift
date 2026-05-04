@@ -596,9 +596,10 @@ final class PVPApplePayHandler: NSObject, PKPaymentAuthorizationControllerDelega
         pkRequest.supportedNetworks = [.visa, .masterCard, .mada]
         pkRequest.merchantCapabilities = [.capability3DS, .capabilityCredit, .capabilityDebit]
 
+        let merchantName = "SAAYR"
         let majorAmount = NSDecimalNumber(value: Double(request.amount) / 100.0)
         pkRequest.paymentSummaryItems = [
-            PKPaymentSummaryItem(label: "PVP Battle Entry Fee", amount: majorAmount, type: .final)
+            PKPaymentSummaryItem(label: "\(merchantName) Battle Entry Fee", amount: majorAmount, type: .final)
         ]
 
         controller = PKPaymentAuthorizationController(paymentRequest: pkRequest)
