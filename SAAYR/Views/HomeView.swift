@@ -1,4 +1,5 @@
 import SwiftUI
+import Kingfisher
 
 struct HomeView: View {
     @EnvironmentObject var languageManager: LanguageManager
@@ -43,7 +44,8 @@ struct HomeView: View {
                                 level: userManager.userData.level ?? 0,
                                 stage: userManager.userData.petStage,
                                 xpProgress: userManager.userData.current_percentage ?? 0.0,
-                                progessText: userManager.userData.text_of_progress
+                                progessText: userManager.userData.text_of_progress,
+                                gifUrl: userManager.userData.gif_url
                             )
                             .padding(.horizontal)
 
@@ -363,20 +365,26 @@ struct PetDisplayCard: View {
     let stage: PetStage
     let xpProgress: Double
     let progessText: String
-    
+    var gifUrl: String? = nil
+
     @EnvironmentObject var languageManager: LanguageManager
-    
+
     var body: some View {
         VStack(spacing: 16) {
-            // Circular progress ring with pet emoji
+            // Circular progress ring with pet GIF or fallback emoji
             ZStack {
                 CircularProgressRing(
                     progress: xpProgress,
                     size: 120,
                     lineWidth: 8
                 )
-                Text(stage.emoji)
-                    .font(.system(size: 90))
+                if let urlStr = gifUrl, let url = URL(string: "urlStr") {
+                    KFAnimatedImage(url)
+                        .configure { $0.framePreloadCount = 3 }
+                        .scaledToFit()
+                        .frame(width: 90, height: 90)
+                        .clipShape(Circle())
+                }
             }
             
             // Pet Name & Level
