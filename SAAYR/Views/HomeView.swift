@@ -378,7 +378,7 @@ struct PetDisplayCard: View {
                     size: 120,
                     lineWidth: 8
                 )
-                if let urlStr = gifUrl, let url = URL(string: "urlStr") {
+                if let urlStr = gifUrl, let url = URL(string: urlStr) {
                     KFAnimatedImage(url)
                         .configure { $0.framePreloadCount = 3 }
                         .scaledToFit()
