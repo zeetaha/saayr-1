@@ -50,23 +50,23 @@ struct HomeView: View {
                             .padding(.horizontal)
 
                             statsGrid
-                           PVPBattleCard(isLoading: isCheckingPVP) {
-                               guard userManager.userData.pvp_enabled, !isCheckingPVP else { return }
-                               isCheckingPVP = true
-                               ServiceModel.shared.fetchMyMatchFull { result in
-                                   DispatchQueue.main.async {
-                                       isCheckingPVP = false
-                                       if case .success(let response) = result,
-                                          let match = response.data,
-                                          match.status == "in_progress" {
-                                           activeMatchForResume = match
-                                           showActiveMatch = true
-                                       } else {
-                                           showPVPPayment = true
-                                       }
-                                   }
-                               }
-                           }
+//                           PVPBattleCard(isLoading: isCheckingPVP) {
+//                               guard userManager.userData.pvp_enabled, !isCheckingPVP else { return }
+//                               isCheckingPVP = true
+//                               ServiceModel.shared.fetchMyMatchFull { result in
+//                                   DispatchQueue.main.async {
+//                                       isCheckingPVP = false
+//                                       if case .success(let response) = result,
+//                                          let match = response.data,
+//                                          match.status == "in_progress" {
+//                                           activeMatchForResume = match
+//                                           showActiveMatch = true
+//                                       } else {
+//                                           showPVPPayment = true
+//                                       }
+//                                   }
+//                               }
+//                           }
                             leaderboardSection
                             } // end if isLoadingData
                         }

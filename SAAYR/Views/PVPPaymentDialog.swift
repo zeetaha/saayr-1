@@ -1,16 +1,8 @@
 import SwiftUI
 import MoyasarSdk
-import PassKit
 
 extension String: @retroactive Identifiable {
     public var id: String { self }
-}
-
-// MARK: - Payment Method Enum
-
-enum PVPPaymentMethod {
-    case card
-    case applePay
 }
 
 // Wraps PaymentRequest so it can be used with .sheet(item:),
@@ -27,12 +19,9 @@ struct PVPPaymentDialog: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
 
-    @State private var selectedMethod: PVPPaymentMethod = PKPaymentAuthorizationController.canMakePayments() ? .applePay : .card
-    @State private var showPaymentMethod = false
     @State private var creditCardItem: CreditCardPaymentItem? = nil
     @State private var paymentError: String? = nil
     @State private var showErrorAlert = false
-    @State private var applePayHandler = PVPApplePayHandler()
     @State private var matchFlowPaymentId: String? = nil
 
     @State private var pvpInfo: PVPInfoResponse? = nil
@@ -72,40 +61,10 @@ struct PVPPaymentDialog: View {
             }
         }
         .onAppear {
-            applePayHandler.onResult = { success, paymentId, errorMsg in
-                if success, let pid = paymentId {
-                    startMatchFlow(paymentId: pid)
-                } else {
-                    paymentError = errorMsg ?? "Apple Pay failed. Please try again."
-                    showErrorAlert = true
-                }
-            }
             ServiceModel.shared.fetchPVPInfo { result in
                 DispatchQueue.main.async {
                     isLoadingInfo = false
                     if case .success(let info) = result { pvpInfo = info }
-                }
-            }
-        }
-        .sheet(isPresented: $showPaymentMethod) {
-            PaymentMethodView(
-                isPresented: $showPaymentMethod,
-                selectedMethod: $selectedMethod,
-                amountSAR: entryFeeSAR
-            ) {
-                showPaymentMethod = false
-                // Wait for the PaymentMethodView sheet to fully dismiss before
-                // presenting the next UI. Triggering either sheet or Apple Pay
-                // while the previous sheet is still animating out causes blank
-                // content or a silent failure to present.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    if selectedMethod == .card {
-                        if let req = makePVPPaymentRequest() {
-                            creditCardItem = CreditCardPaymentItem(request: req)
-                        }
-                    } else {
-                        triggerApplePay()
-                    }
                 }
             }
         }
@@ -135,12 +94,6 @@ struct PVPPaymentDialog: View {
                 isPresented = false
             }
         }
-    }
-
-    // MARK: - startMatchFlow
-
-    private func startMatchFlow(paymentId: String) {
-        matchFlowPaymentId = paymentId
     }
 
     // MARK: - Header
@@ -230,44 +183,25 @@ struct PVPPaymentDialog: View {
     private var paymentMethodCard: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                // Icon
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color(hex: "#F3F4F6"))
                         .frame(width: 48, height: 36)
-                    if selectedMethod == .applePay {
-                        Image(systemName: "apple.logo")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.black)
-                    } else {
-                        Image(systemName: "creditcard.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(hex: "#6B7280"))
-                    }
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color(hex: "#6B7280"))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(selectedMethod == .applePay ? "Apple Pay" : "Credit / Debit Card")
+                    Text("Credit / Debit Card")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.black)
-                    Text("Payment method")
+                    Text("Visa, Mastercard, Mada")
                         .font(.system(size: 12))
                         .foregroundColor(Color(hex: "#6B7280"))
                 }
 
                 Spacer()
-
-                Button {
-                    showPaymentMethod = true
-                } label: {
-                    Text("Change")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color(hex: "#16A34A"))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color(hex: "#DCFCE7"))
-                        .cornerRadius(20)
-                }
             }
 
             Divider()
@@ -276,7 +210,7 @@ struct PVPPaymentDialog: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 12))
                     .foregroundColor(Color(hex: "#9CA3AF"))
-                Text("Secure payment methods")
+                Text("Secure payment")
                     .font(.system(size: 12))
                     .foregroundColor(Color(hex: "#9CA3AF"))
                 Spacer()
@@ -290,7 +224,6 @@ struct PVPPaymentDialog: View {
 
     // MARK: - Win Rewards Card
 
-    // Display order: winner → mission → loser
     private var orderedRewards: [PVPReward] {
         guard let rewards = pvpInfo?.rewards else { return [] }
         let order = ["winner", "mission", "loser"]
@@ -299,9 +232,9 @@ struct PVPPaymentDialog: View {
 
     private func rewardColor(for index: Int) -> Color {
         switch index {
-        case 0: return Color(hex: "#16A34A") // winner — green
-        case 1: return Color(hex: "#2563EB") // mission — blue
-        default: return Color(hex: "#F97316") // loser — orange
+        case 0: return Color(hex: "#16A34A")
+        case 1: return Color(hex: "#2563EB")
+        default: return Color(hex: "#F97316")
         }
     }
 
@@ -350,46 +283,30 @@ struct PVPPaymentDialog: View {
 
     // MARK: - Join Battle Button
 
-    @ViewBuilder
     private var joinBattleButton: some View {
-        if selectedMethod == .applePay {
-            // Native PKPaymentButton for Apple Pay
-            ApplePayJoinButton {
-                triggerApplePay()
+        Button {
+            if let req = makePVPPaymentRequest() {
+                creditCardItem = CreditCardPaymentItem(request: req)
             }
-            .frame(height: 56)
-            .cornerRadius(16)
-            .padding(.top, 8)
-        } else {
-            Button {
-                if let req = makePVPPaymentRequest() {
-                    creditCardItem = CreditCardPaymentItem(request: req)
-                }
-            } label: {
-                Text("Join Battle — \(entryFeeSAR) SAR")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(hex: "#F97316"), Color(hex: "#EF4444")],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+        } label: {
+            Text("Join Battle — \(entryFeeSAR) SAR")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "#F97316"), Color(hex: "#EF4444")],
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
-                    .cornerRadius(16)
-            }
-            .padding(.top, 8)
+                )
+                .cornerRadius(16)
         }
+        .padding(.top, 8)
     }
 
     // MARK: - Payment Actions
-
-    private func triggerApplePay() {
-        guard let request = makePVPPaymentRequest() else { return }
-        applePayHandler.present(request: request)
-    }
 
     private func makePVPPaymentRequest() -> PaymentRequest? {
         do {
@@ -413,7 +330,7 @@ struct PVPPaymentDialog: View {
         switch result {
         case let .completed(payment):
             if payment.status == .authorized {
-                startMatchFlow(paymentId: payment.id)
+                matchFlowPaymentId = payment.id
             } else {
                 if case let .creditCard(source) = payment.source {
                     paymentError = source.message ?? "Payment was not completed."
@@ -439,241 +356,8 @@ struct PVPPaymentDialog: View {
     }
 }
 
-// MARK: - Payment Method View
-
-struct PaymentMethodView: View {
-    @Binding var isPresented: Bool
-    @Binding var selectedMethod: PVPPaymentMethod
-    var amountSAR: Int = 5
-    var onContinue: () -> Void
-
-    private let canUseApplePay = PKPaymentAuthorizationController.canMakePayments()
-
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Payment Method")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.black)
-                    Text("Choose how you'd like to pay \(amountSAR) SAR")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color(hex: "#6B7280"))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-
-                VStack(spacing: 12) {
-                    // Credit / Debit Card option
-                    methodRow(
-                        icon: "creditcard.fill",
-                        iconColor: Color(hex: "#6B7280"),
-                        title: "Credit / Debit Card",
-                        subtitle: "Visa, Mastercard, Mada",
-                        method: .card
-                    )
-
-                    // Apple Pay option (only if device supports it)
-                    if canUseApplePay {
-                        methodRow(
-                            icon: "apple.logo",
-                            iconColor: .black,
-                            title: "Apple Pay",
-                            subtitle: "Touch ID or Face ID",
-                            method: .applePay
-                        )
-                    }
-                }
-                .padding(.horizontal, 20)
-
-                Spacer()
-
-                Button(action: onContinue) {
-                    Text("Continue")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(hex: "#F97316"), Color(hex: "#EF4444")],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(16)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 32)
-            }
-            .background(Color(hex: "#F5F5F5").ignoresSafeArea())
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        isPresented = false
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.left")
-                            Text("Back")
-                        }
-                        .foregroundColor(Color(hex: "#374151"))
-                        .font(.system(size: 15))
-                    }
-                }
-            }
-        }
-    }
-
-    private func methodRow(icon: String, iconColor: Color,
-                           title: String, subtitle: String,
-                           method: PVPPaymentMethod) -> some View {
-        let isSelected = selectedMethod == method
-        return Button {
-            selectedMethod = method
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(hex: "#F3F4F6"))
-                        .frame(width: 48, height: 36)
-                    Image(systemName: icon)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(iconColor)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.black)
-                    Text(subtitle)
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "#6B7280"))
-                }
-
-                Spacer()
-
-                Image(systemName: isSelected ? "record.circle" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(isSelected ? Color(hex: "#EF4444") : Color(hex: "#D1D5DB"))
-            }
-            .padding(16)
-            .background(Color.white)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color(hex: "#EF4444") : Color.clear, lineWidth: 1.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Apple Pay Handler
-
-final class PVPApplePayHandler: NSObject, PKPaymentAuthorizationControllerDelegate {
-    var onResult: ((Bool, String?, String?) -> Void)?
-
-    private var applePayService: ApplePayService?
-    private var controller: PKPaymentAuthorizationController?
-    private var pendingPaymentRequest: PaymentRequest?
-    private var pendingResult: (Bool, String?, String?)? = nil
-
-    func present(request: PaymentRequest) {
-        pendingPaymentRequest = request
-
-        do {
-            applePayService = try ApplePayService(apiKey: request.apiKey, baseUrl: request.baseUrl)
-        } catch {
-            onResult?(false, nil, "Failed to initialize Apple Pay.")
-            return
-        }
-
-        let pkRequest = PKPaymentRequest()
-        pkRequest.merchantIdentifier = WebService.applePayMerchantId
-        pkRequest.countryCode = "SA"
-        pkRequest.currencyCode = request.currency
-        pkRequest.supportedNetworks = [.visa, .masterCard, .mada]
-        pkRequest.merchantCapabilities = [.capability3DS, .capabilityCredit, .capabilityDebit]
-
-        let merchantName = "SAAYR"
-        let majorAmount = NSDecimalNumber(value: Double(request.amount) / 100.0)
-        pkRequest.paymentSummaryItems = [
-            PKPaymentSummaryItem(label: "\(merchantName) Battle Entry Fee", amount: majorAmount, type: .final)
-        ]
-
-        controller = PKPaymentAuthorizationController(paymentRequest: pkRequest)
-        controller?.delegate = self
-        controller?.present()
-    }
-
-    func paymentAuthorizationController(_ controller: PKPaymentAuthorizationController,
-                                        didAuthorizePayment payment: PKPayment,
-                                        handler completion: @escaping (PKPaymentAuthorizationResult) -> Void) {
-        guard let request = pendingPaymentRequest, let service = applePayService else {
-            pendingResult = (false, nil, "Apple Pay configuration error.")
-            completion(PKPaymentAuthorizationResult(status: .failure, errors: []))
-            return
-        }
-
-        Task {
-            do {
-                let apiPayment = try await service.authorizePayment(request: request, token: payment.token)
-                await MainActor.run {
-                    print("apiPayment : \(apiPayment)")
-                    if apiPayment.status == .authorized {
-                        pendingResult = (true, apiPayment.id, nil)
-                        completion(PKPaymentAuthorizationResult(status: .success, errors: []))
-                    } else {
-                        let msg: String
-                        if case let .applePay(source) = apiPayment.source {
-                            msg = source.message ?? "Payment failed."
-                        } else {
-                            msg = "Payment failed."
-                        }
-                        pendingResult = (false, nil, msg)
-                        completion(PKPaymentAuthorizationResult(status: .failure, errors: []))
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    pendingResult = (false, nil, error.localizedDescription)
-                    completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
-                }
-            }
-        }
-    }
-
-    func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
-        controller.dismiss {
-            if let result = self.pendingResult {
-                DispatchQueue.main.async {
-                    self.onResult?(result.0, result.1, result.2)
-                }
-                self.pendingResult = nil
-            }
-        }
-    }
-}
-
-// MARK: - Apple Pay Join Button
-
-struct ApplePayJoinButton: UIViewRepresentable {
-    var action: () -> Void
-
-    func makeUIView(context: Context) -> PKPaymentButton {
-        let button = PKPaymentButton(paymentButtonType: .plain, paymentButtonStyle: .black)
-        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
-        return button
-    }
-
-    func updateUIView(_ uiView: PKPaymentButton, context: Context) {}
-}
-
 // MARK: - Credit Card Payment Sheet
 
-/// Owns CreditCardViewModel as @StateObject so parent re-renders never
-/// recreate the view model and wipe entered card details.
 private struct CreditCardPaymentSheet: View {
     @StateObject private var viewModel: CreditCardViewModel
     let onCancel: () -> Void
