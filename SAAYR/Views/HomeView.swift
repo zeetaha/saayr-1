@@ -21,7 +21,12 @@ struct HomeView: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
+                // Oud smoke ambient layer — visible on Fridays in Riyadh time
+                if isFridayInRiyadh {
+                    OudSmokeOverlay()
+                }
+
                 // Floating particles
                 ForEach(particles) { particle in
                     Circle()
@@ -114,7 +119,9 @@ struct HomeView: View {
     private var greetingSection: some View {
         HStack {
             VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 4) {
-                Text(languageManager.currentLanguage == .english ? "Welcome back," : "مرحبًا بك مجددًا،")
+                Text(languageManager.currentLanguage == .english
+                        ? (userManager.userData.greeting_en ?? "Welcome back,")
+                        : (userManager.userData.greeting_ar ?? "مرحبًا بك مجددًا،"))
                     .font(.system(size: 14))
                     .foregroundColor(.gray)
                 
@@ -125,24 +132,24 @@ struct HomeView: View {
             Spacer()
             
             // Points Badge
-            HStack(spacing: 6) {
-                Image(systemName: "star.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 18, height: 18)
-                    .foregroundColor(.white)
-                
-                Text("\(userManager.userData.points)")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(userManager.stageColor)
-                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
-            )
+//            HStack(spacing: 6) {
+//                Image(systemName: "star.fill")
+//                    .resizable()
+//                    .scaledToFit()
+//                    .frame(width: 18, height: 18)
+//                    .foregroundColor(.white)
+//                
+//                Text("\(userManager.userData.points)")
+//                    .font(.system(size: 16, weight: .bold))
+//                    .foregroundColor(.white)
+//            }
+//            .padding(.horizontal, 16)
+//            .padding(.vertical, 10)
+//            .background(
+//                RoundedRectangle(cornerRadius: 20)
+//                    .fill(userManager.stageColor)
+//                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+//            )
         }
         .padding(.top, 16)
     }
@@ -205,6 +212,14 @@ struct HomeView: View {
         }
     }
     
+    // Returns true all day Friday, using Riyadh time regardless of device timezone
+    private var isFridayInRiyadh: Bool {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Riyadh")!
+        return cal.component(.weekday, from: Date()) == 6  // 6 = Friday
+        
+    }
+
     // MARK: - Particles
     func generateParticles() {
         let screenWidth = UIScreen.main.bounds.width
@@ -728,6 +743,71 @@ struct HomeSkeletonView: View {
             }
         }
         .padding(.horizontal)
+    }
+}
+
+// MARK: - Oud Smoke Overlay
+
+struct OudSmokeOverlay: View {
+    // 5 wisp streams clustered near the screen's lower-centre, like rising bakhoor
+    private static let streams: [(xFrac: Double, phase0: Double, speedMul: Double)] = [
+        (0.44, 0.00, 1.00),
+        (0.48, 0.33, 0.92),
+        (0.50, 0.67, 1.08),
+        (0.52, 0.17, 0.95),
+        (0.56, 0.50, 1.03),
+    ]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 20)) { tl in
+            Canvas { ctx, size in
+                let t = tl.date.timeIntervalSinceReferenceDate
+                let originY = size.height * 0.75
+
+                for (si, cfg) in Self.streams.enumerated() {
+                    let baseX  = size.width * cfg.xFrac
+                    let sif    = Double(si)
+
+                    for slot in 0..<12 {
+                        let slotF = Double(slot)
+                        let speed = 0.055 * cfg.speedMul + slotF * 0.003
+                        let phase = (t * speed + cfg.phase0 + slotF / 12)
+                            .truncatingRemainder(dividingBy: 1.0)
+
+                        // Rise vertically, sway horizontally
+                        let y      = originY - phase * size.height * 0.62
+                        let sway   = 8.0 + phase * 36.0
+                        let x      = baseX + sin(t * (0.25 + sif * 0.06) + slotF * 1.1 + sif * 0.8) * sway
+
+                        // Grow from a tight wisp to a broad cloud
+                        let radius = 5.0 + phase * 54.0
+
+                        // Quick fade-in, slow fade-out
+                        let fadeIn  = min(phase / 0.12, 1.0)
+                        let fadeOut = 1.0 - max((phase - 0.20) / 0.80, 0.0)
+                        let alpha   = fadeIn * fadeOut * 0.13
+
+                        guard alpha > 0.003 else { continue }
+
+                        // Warm amber near the source → cool ivory as it rises
+                        let warmth = 1.0 - phase
+                        let r = 0.94 + warmth * 0.04
+                        let g = 0.86 + warmth * 0.05
+                        let b = 0.70 + warmth * 0.06 + phase * 0.10
+
+                        ctx.fill(
+                            Path(ellipseIn: CGRect(
+                                x: x - radius, y: y - radius,
+                                width: radius * 2, height: radius * 2
+                            )),
+                            with: .color(Color(red: r, green: g, blue: b).opacity(alpha))
+                        )
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
     }
 }
 

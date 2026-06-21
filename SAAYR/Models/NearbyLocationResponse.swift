@@ -24,6 +24,44 @@ struct NearbyLocationResponse: Identifiable, Sendable {
     let image_url: String?
     let can_checkin: Bool
     let is_partner: Bool
+    let zone_id: Int?
+}
+
+// MARK: - Fog of War models
+
+struct ZoneCoordinate: Decodable {
+    let lat: Double
+    let lng: Double
+}
+
+struct Zone: Identifiable, Decodable {
+    let id: Int
+    let name: String
+    let name_ar: String
+    let description: String?
+    let description_ar: String?
+    let boundary_polygon: [ZoneCoordinate]
+    let center_lat: String
+    let center_lng: String
+    let is_unlocked: Bool
+}
+
+struct ZoneUnlockInfo: Decodable {
+    let zone_id: Int
+    let headline_en: String
+    let headline_ar: String
+    let body_en: String
+    let body_ar: String
+    let cta_en: String
+    let cta_ar: String
+    let center_lat: String
+    let center_lng: String
+}
+
+// New response envelope for v1.0.7+ nearby
+struct NearbyAPIResponse: Decodable {
+    let locations: [NearbyLocationResponse]
+    let newly_unlocked_zone: ZoneUnlockInfo?
 }
 
 
@@ -55,10 +93,8 @@ final class LocationAPI {
         latitude: Double,
         longitude: Double,
         radiusKM: Int = 5,
-        completion: @escaping @Sendable ([NearbyLocationResponse]) -> Void
+        completion: @escaping @Sendable ([NearbyLocationResponse], ZoneUnlockInfo?) -> Void
     ) {
-
-
         let params: [String: Any] = [
             "latitude": latitude,
             "longitude": longitude,
@@ -69,32 +105,25 @@ final class LocationAPI {
             endpoint: WebService.nearBy,
             parameters: params
         ) { result in
-
             switch result {
-
             case .success(let data):
-                do {
-                    let decoded = try JSONDecoder().decode(
-                        [NearbyLocationResponse].self,
-                        from: data
-                    )
-
+                // Try new envelope format first, fall back to legacy array
+                if let envelope = try? JSONDecoder().decode(NearbyAPIResponse.self, from: data) {
                     DispatchQueue.main.async {
-                        completion(decoded)
+                        completion(envelope.locations, envelope.newly_unlocked_zone)
                     }
-
-                } catch {
-                    print("❌ Decoding error:", error)
+                } else if let legacy = try? JSONDecoder().decode([NearbyLocationResponse].self, from: data) {
                     DispatchQueue.main.async {
-                        completion([])
+                        completion(legacy, nil)
                     }
+                } else {
+                    print("❌ Decoding error: unrecognised nearby response shape")
+                    DispatchQueue.main.async { completion([], nil) }
                 }
 
             case .failure(let error):
                 print("❌ API error:", error.localizedDescription)
-                DispatchQueue.main.async {
-                    completion([])
-                }
+                DispatchQueue.main.async { completion([], nil) }
             }
         }
     }

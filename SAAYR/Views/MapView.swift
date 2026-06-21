@@ -1,14 +1,24 @@
 import SwiftUI
 import MapKit
 import Combine
+import Kingfisher
 
 struct MapView: View {
-    
+
+    @EnvironmentObject var languageManager: LanguageManager
+
     @StateObject private var locationManager = LocationManager()
-    
+    @StateObject private var weatherManager = WeatherManager()
+
     @State private var region = MKCoordinateRegion()
     @State private var locations: [NearbyLocationResponse] = []
     @State private var selectedLocation: NearbyLocationResponse?
+
+    // Fog of War
+    @State private var fogZones: [Zone] = []
+    @State private var fogLoaded = false
+    @State private var pendingUnlock: ZoneUnlockInfo? = nil
+    @State private var showUnlockPopup = false
     
     @State private var lastFetchCenter: CLLocationCoordinate2D?
     @State private var trackingMode: MapUserTrackingMode = .follow
@@ -57,7 +67,8 @@ struct MapView: View {
                             emoji: "📍",
                             xpReward: item.xp_reward,
                             coordinate: item.coordinate,
-                            can_checkin: item.can_checkin
+                            can_checkin: item.can_checkin,
+                            imageUrl: WebService.resolvedImageUrl(item.image_url)
                         ),
                         isInRange: true,
                         isActive: selectedLocation?.id == item.id,
@@ -71,14 +82,23 @@ struct MapView: View {
                 }
             }
             .ignoresSafeArea()
-            
-            
+
            
+
+            // MARK: Fog of War
+            if fogLoaded {
+                FogOverlayView(zones: fogZones, region: region)
+                    .transition(.opacity)
+                    .animation(.easeIn(duration: 0.5), value: fogLoaded)
+            }
+
+            // MARK: Weather Overlay
+            WeatherOverlayView(condition: weatherManager.condition)
             
             // MARK: HeaderCard - Only show after API response
             if !locations.isEmpty && !showSuccessAlert && !showAlert{
                 VStack {
-                    HeaderCard(nearbyCount: locations.count)
+                    HeaderCard(nearbyCount: locations.count, weatherData: weatherManager.data)
                     Spacer()
                 }
                 .animation(.easeIn, value: locations.count)
@@ -145,7 +165,9 @@ struct MapView: View {
                         category: location.category,
                         emoji: "📍",
                         xpReward: location.xp_reward,
-                        coordinate: location.coordinate, can_checkin: location.can_checkin
+                        coordinate: location.coordinate,
+                        can_checkin: location.can_checkin,
+                        imageUrl: WebService.resolvedImageUrl(location.image_url)
                     ),
                     progress: progress,
                     remaining: checkInDuration - elapsedTime
@@ -193,14 +215,36 @@ struct MapView: View {
                     startCheckIn(location)
                 }
             }
-            
+
+            // MARK: Zone Unlock Popup
+            if showUnlockPopup, let info = pendingUnlock {
+                ZoneUnlockPopup(
+                    info: info,
+                    isEnglish: languageManager.currentLanguage == .english
+                ) { zoneCenter in
+                    withAnimation(.easeInOut) {
+                        showUnlockPopup = false
+                        pendingUnlock = nil
+                        region = MKCoordinateRegion(
+                            center: zoneCenter,
+                            span: .init(latitudeDelta: 0.15, longitudeDelta: 0.15)
+                        )
+                    }
+                    fetchFogZones()
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(100)
+            }
+
         }
         .onAppear {
             locationManager.requestPermission()
+            fetchFogZones()
         }
         .onReceive(locationManager.$location.compactMap { $0 }) { location in
             moveToUser(location)
             fetchNearby(location.coordinate)
+            weatherManager.update(coordinate: location.coordinate)
         }
         
         .onChange(of: equatableCenter) { newCenter in
@@ -240,22 +284,35 @@ struct MapView: View {
     private func moveToUser(_ location: CLLocation) {
         region = MKCoordinateRegion(
             center: location.coordinate,
-            span: .init(latitudeDelta: 0.1, longitudeDelta: 0.02)
+            span: .init(latitudeDelta: 0.5, longitudeDelta: 0.5)
         )
     }
     
     private func fetchNearby(_ coordinate: CLLocationCoordinate2D) {
         lastFetchCenter = coordinate
-        
+
         LocationAPI.shared.fetchNearby(
             latitude: coordinate.latitude,
             longitude: coordinate.longitude
-        ) { newItems in
-            // Prevent duplicate pins
+        ) { newItems, unlockInfo in
             let existingIDs = Set(locations.map { $0.id })
             let filtered = newItems.filter { !existingIDs.contains($0.id) }
-            
             locations.append(contentsOf: filtered)
+
+            if let unlock = unlockInfo {
+                fetchFogZones()
+                pendingUnlock = unlock
+                withAnimation { showUnlockPopup = true }
+            }
+        }
+    }
+
+    private func fetchFogZones() {
+        ServiceModel.shared.fetchZones { result in
+            DispatchQueue.main.async {
+                fogLoaded = true
+                if case .success(let zones) = result { fogZones = zones }
+            }
         }
     }
     
@@ -328,34 +385,39 @@ struct MapView: View {
 
 struct HeaderCard: View {
     let nearbyCount: Int
-    
+    var weatherData: WeatherData? = nil
+
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(Color.green)
                     .frame(width: 40, height: 40)
-                
+
                 Image(systemName: "map")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 20, height: 20)
                     .foregroundColor(.white)
             }
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("Map")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.black)
-                
+
                 Text(nearbyCount > 0 ?
                      "\(nearbyCount) merchant\(nearbyCount > 1 ? "s" : "") nearby" :
                         "No merchants nearby")
-                .font(.system(size: 12))
-                .foregroundColor(.gray)
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
             }
-            
+
             Spacer()
+
+            if let weather = weatherData {
+                WeatherMiniWidget(data: weather)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -404,9 +466,17 @@ struct MerchantMarkerView: View {
                         .stroke(isInRange ? markerColor : Color.gray, lineWidth: 3)
                 )
                 .shadow(radius: 6)
-            
-            Text(merchant.emoji)
-                .font(.system(size: 24))
+
+            if let urlStr = merchant.imageUrl, let url = URL(string: urlStr) {
+                KFImage(url)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Text(merchant.emoji)
+                    .font(.system(size: 24))
+            }
         }
         .onAppear { pulse = true }
         .scaleEffect(isActive ? 1.15 : 1)
@@ -422,14 +492,22 @@ struct CheckInProgressCard: View {
         VStack {
             VStack(spacing: 16) {
                 HStack {
-                    Text(merchant.emoji)
-                        .font(.largeTitle)
-                    
+                    if let urlStr = merchant.imageUrl, let url = URL(string: urlStr) {
+                        KFImage(url)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Text(merchant.emoji)
+                            .font(.largeTitle)
+                    }
+
                     VStack(alignment: .leading) {
                         Text(merchant.name)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
-                        
+
                         Text("Checking in...")
                             .foregroundColor(.white.opacity(0.8))
                     }
@@ -474,9 +552,17 @@ struct BottomCheckInCard: View {
             
             VStack(spacing: 16) {
                 HStack(spacing: 16) {
-                    // Merchant Emoji
-                    Text(merchant.emoji)
-                        .font(.system(size: 48))
+                    // Merchant image or fallback emoji
+                    if let urlStr = merchant.imageUrl, let url = URL(string: urlStr) {
+                        KFImage(url)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } else {
+                        Text(merchant.emoji)
+                            .font(.system(size: 48))
+                    }
                     
                     VStack(alignment: .leading, spacing: 4) {
                         // Merchant Name
@@ -558,6 +644,7 @@ struct MerchantLocation: Identifiable {
     let xpReward: Int
     let coordinate: CLLocationCoordinate2D
     let can_checkin: Bool
+    let imageUrl: String?
 }
 extension NearbyLocationResponse {
     var asMerchant: MerchantLocation {
@@ -565,10 +652,11 @@ extension NearbyLocationResponse {
             id: id,
             name: name,
             category: category,
-            emoji: "📍",  // default
+            emoji: "📍",
             xpReward: xp_reward,
             coordinate: coordinate,
-            can_checkin: can_checkin
+            can_checkin: can_checkin,
+            imageUrl: WebService.resolvedImageUrl(image_url)
         )
     }
 }
@@ -578,6 +666,149 @@ struct MerchantWithDistance: Identifiable {
     let id = UUID()           // Make it Identifiable
     let merchant: MerchantLocation
     let distance: Double
+}
+
+// MARK: - Fog Overlay
+
+struct FogOverlayView: View {
+    let zones: [Zone]
+    let region: MKCoordinateRegion
+
+    var body: some View {
+        Canvas { ctx, size in
+            var path = Path()
+            // Full-screen dark rectangle
+            path.addRect(CGRect(x: -200, y: -200, width: size.width + 400, height: size.height + 400))
+            // Punch a transparent hole for each unlocked zone (even-odd rule)
+            for zone in zones where zone.is_unlocked {
+                let pts = zone.boundary_polygon.map {
+                    mapPoint(lat: $0.lat, lng: $0.lng, region: region, size: size)
+                }
+                guard let first = pts.first else { continue }
+                path.move(to: first)
+                pts.dropFirst().forEach { path.addLine(to: $0) }
+                path.closeSubpath()
+            }
+            ctx.fill(path, with: .color(.black.opacity(0.72)), style: FillStyle(eoFill: true))
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
+
+    // Linear lat/lng → screen-pixel conversion (accurate enough at city scale)
+    private func mapPoint(lat: Double, lng: Double, region: MKCoordinateRegion, size: CGSize) -> CGPoint {
+        let minLat = region.center.latitude  - region.span.latitudeDelta  / 2
+        let maxLat = region.center.latitude  + region.span.latitudeDelta  / 2
+        let minLng = region.center.longitude - region.span.longitudeDelta / 2
+        let maxLng = region.center.longitude + region.span.longitudeDelta / 2
+        let latRange = maxLat - minLat
+        let lngRange = maxLng - minLng
+        guard latRange != 0, lngRange != 0 else { return .zero }
+        return CGPoint(
+            x: (lng - minLng) / lngRange * size.width,
+            y: (1.0 - (lat - minLat) / latRange) * size.height
+        )
+    }
+}
+
+// MARK: - Zone Unlock Popup
+
+struct ZoneUnlockPopup: View {
+    let info: ZoneUnlockInfo
+    let isEnglish: Bool
+    let onExplore: (CLLocationCoordinate2D) -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            FogLiftParticles()
+            VStack(spacing: 24) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [Color(hex: "#F97316"), Color(hex: "#EF4444")],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 80, height: 80)
+                    Text("🗺️").font(.system(size: 38))
+                }
+
+                VStack(spacing: 10) {
+                    Text(isEnglish ? info.headline_en : info.headline_ar)
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundColor(.black)
+                        .multilineTextAlignment(.center)
+                    Text(isEnglish ? info.body_en : info.body_ar)
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+
+                Button {
+                    let coord = CLLocationCoordinate2D(
+                        latitude:  Double(info.center_lat) ?? 0,
+                        longitude: Double(info.center_lng) ?? 0
+                    )
+                    onExplore(coord)
+                } label: {
+                    Text(isEnglish ? info.cta_en : info.cta_ar)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(LinearGradient(
+                            colors: [Color(hex: "#F97316"), Color(hex: "#EF4444")],
+                            startPoint: .leading, endPoint: .trailing
+                        ))
+                        .cornerRadius(14)
+                }
+            }
+            .padding(28)
+            .background(Color.white)
+            .cornerRadius(24)
+            .shadow(color: .black.opacity(0.25), radius: 24, x: 0, y: 10)
+            .padding(.horizontal, 32)
+        }
+    }
+}
+
+// MARK: - Fog Lift Particles
+
+struct FogLiftParticles: View {
+    private static let streams: [(x: Double, delay: Double)] = [
+        (0.15, 0.0), (0.30, 0.4), (0.45, 0.9), (0.55, 0.2),
+        (0.65, 0.7), (0.80, 1.1), (0.90, 0.5)
+    ]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 15)) { tl in
+            Canvas { ctx, size in
+                let t = tl.date.timeIntervalSinceReferenceDate
+                for (si, s) in Self.streams.enumerated() {
+                    let baseX = size.width * s.x
+                    let sif = Double(si)
+                    for slot in 0..<10 {
+                        let sf = Double(slot)
+                        let phase = (t * 0.22 + s.delay + sf / 10)
+                            .truncatingRemainder(dividingBy: 1.0)
+                        let y = size.height - phase * size.height * 1.05
+                        let x = baseX + sin(t * 0.45 + sf * 0.9 + sif * 0.6) * 28
+                        let r = 8.0 + phase * 65.0
+                        let alpha = min(phase / 0.08, 1.0) * (1.0 - max((phase - 0.25) / 0.75, 0.0)) * 0.28
+                        guard alpha > 0.005 else { continue }
+                        ctx.fill(
+                            Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                            with: .color(Color.white.opacity(alpha))
+                        )
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
 }
 
 #Preview {

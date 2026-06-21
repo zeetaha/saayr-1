@@ -338,7 +338,41 @@ class ServiceModel {
         }
     }
 
+    // MARK: - Zones (Fog of War)
+
+    func fetchZones(completion: @escaping (Result<[Zone], Error>) -> Void) {
+        getRequest(endpoint: WebService.zones) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let zones = try JSONDecoder().decode([Zone].self, from: data)
+                    completion(.success(zones))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     // MARK: - Fetch Challenges
+    func fetchWeeklyTop3(completion: @escaping (Result<WeeklyTop3Response, Error>) -> Void) {
+        getRequest(endpoint: WebService.weeklyTop3) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(WeeklyTop3Response.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     func fetchChallenges(completion: @escaping (Result<ChallengesResponse, Error>) -> Void) {
         getRequest(endpoint: WebService.challenges) { result in
             switch result {
@@ -382,7 +416,8 @@ class ServiceModel {
                 headers["Authorization"] = "Bearer \(token)"
         }
         headers["Language-Code"] = UserModel.shared.languageCode
-        headers["App-Version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        headers["App-Version"]   = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        headers["X-App-Version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         headers["Latitude"] = UserModel.shared.latitude
         headers["Longitude"] = UserModel.shared.longitude
         headers["Country-Code"] = UserModel.shared.countryCode

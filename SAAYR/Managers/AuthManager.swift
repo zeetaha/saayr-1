@@ -498,7 +498,7 @@ class AuthManager: ObservableObject {
                     case 400:
                         self.errorMessage = "Falcon name already taken. Please try another."
                     case 422:
-                        self.errorMessage = "Falcon name is invalid. Use letters and numbers only."
+                        self.errorMessage = "Falcon name is not accepted. Use only letters and numbers — no spaces or special characters."
                     default:
                         self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
                     }

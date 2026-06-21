@@ -50,6 +50,8 @@ struct DashboardResponse: Decodable {
     let text_of_progress: String?
     let current_percentage: Double?
     let gif_url: String?
+    let greeting_en: String?
+    let greeting_ar: String?
 }
 
 struct LeaderboardEntry: Decodable, Identifiable {
