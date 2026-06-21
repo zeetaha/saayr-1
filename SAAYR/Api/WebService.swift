@@ -86,7 +86,7 @@ class WebService {
 
     // MARK: - Weather
     // Get a free key at https://openweathermap.org/api → Current Weather Data
-    static let openWeatherApiKey = "069f0cb00b2de3bc3beecd5deba612e0"
+    static let openWeatherApiKey = ""
 
     // MARK: - Convenience
     /// Which environment is active — useful for debug banners or logging.
