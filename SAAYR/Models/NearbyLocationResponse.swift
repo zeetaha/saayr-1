@@ -10,23 +10,110 @@ import CoreLocation
 import Alamofire
 
 
-struct NearbyLocationResponse: Identifiable, Sendable {
+struct NearbyLocationResponse: Identifiable, Sendable, Codable {
+
+    // MARK: - Core fields
     let id: Int
     let name: String
     let description: String?
     let city: String
     let address: String?
+
     let latitude: Double
     let longitude: Double
+
     let radius_meters: Int
     let xp_reward: Int
+    let cooldown_hours: Int
+
     let category: String
     let image_url: String?
+
     let can_checkin: Bool
     let is_partner: Bool
     let zone_id: Int?
+
+    // MARK: - Extended backend fields
+    let is_active: Bool?
+    let created_at: String?
+
+    let last_checkin: String?
+    let cooldown_remaining_minutes: Int?
+
+    let merchant_id: Int?
+    let merchant_name: String?
+
+    // MARK: - King / ownership metadata (NEW)
+    let king_user_id: Int?
+    let king_falcon_name: String?
+    let king_full_name: String?
+
+    /// Polygon boundary (nil = circular geofence only)
+    let boundary_polygon: [PolygonPoint]?
+
+    // MARK: - Helpers
+
+    var coordinate: CLLocationCoordinate2D {
+        .init(latitude: latitude, longitude: longitude)
+    }
+
+    var hasPolygon: Bool {
+        boundary_polygon?.isEmpty == false
+    }
+
+    // Optional: safe center fallback for UI / map camera
+    var polygonCenter: CLLocationCoordinate2D? {
+        guard let boundary_polygon, !boundary_polygon.isEmpty else { return nil }
+
+        let lat = boundary_polygon.map(\.lat).reduce(0, +) / Double(boundary_polygon.count)
+        let lng = boundary_polygon.map(\.lng).reduce(0, +) / Double(boundary_polygon.count)
+
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+    }
+
+    // MARK: - Coding Keys
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case city
+        case address
+        case latitude
+        case longitude
+        case radius_meters
+        case xp_reward
+        case cooldown_hours
+        case category
+        case image_url
+        case can_checkin
+        case is_partner
+        case zone_id
+
+        case is_active
+        case created_at
+        case last_checkin
+        case cooldown_remaining_minutes
+        case merchant_id
+        case merchant_name
+
+        case king_user_id
+        case king_falcon_name
+        case king_full_name
+
+        case boundary_polygon
+    }
 }
 
+
+struct PolygonPoint: Codable, Sendable, Hashable {
+    let lat: Double
+    let lng: Double
+
+    var coordinate: CLLocationCoordinate2D {
+        .init(latitude: lat, longitude: lng)
+    }
+}
 // MARK: - Fog of War models
 
 struct ZoneCoordinate: Decodable {
@@ -76,13 +163,13 @@ struct CheckInResponse: Codable {
     let checkin_id: Int?   // ✅ Now can accept null
 }
 
-extension NearbyLocationResponse: Decodable { }
-
-extension NearbyLocationResponse {
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-    }
-}
+//extension NearbyLocationResponse: Decodable { }
+//
+//extension NearbyLocationResponse {
+//    var coordinate: CLLocationCoordinate2D {
+//        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+//    }
+//}
 
 
 final class LocationAPI {

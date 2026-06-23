@@ -296,9 +296,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SAAYR/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "SAAYR Staging";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Your location is used to show nearby merchants.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show nearby merchants and allow check-ins.";
@@ -343,9 +343,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SAAYR/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "SAAYR Staging";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Your location is used to show nearby merchants.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show nearby merchants and allow check-ins.";
@@ -449,9 +449,9 @@
 				GCC_OPTIMIZATION_LEVEL = s;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SAAYR/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "SAAYR Staging";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Your location is used to show nearby merchants.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show nearby merchants and allow check-ins.";

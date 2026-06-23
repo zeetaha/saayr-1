@@ -58,10 +58,27 @@ class AuthManager: ObservableObject {
                 ?? "Your account has been blocked. Please contact support."
             self.isBlockedAlert = true
         }
+
+        // Session expired (refresh token returned 401) — force logout
+        NotificationCenter.default.addObserver(
+            forName: .sessionExpired,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.logout()
+            self.errorMessage = "Session expired. Please log in again."
+        }
+
+        // Migration: existing users have no refresh_token stored in Keychain.
+        // If they have an old UserDefaults token but no Keychain token,
+        // force them to re‑authenticate so a refresh token is captured.
+        if TokenManager.shared.accessToken == nil,
+           UserModel.shared.user?.accessToken != nil {
+            logout()
+        }
     }
-    
-    
-    
+
     func sendOTP() {
         isLoading = true
         otp = nil
@@ -86,16 +103,16 @@ class AuthManager: ObservableObject {
                     do {
                         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                             
+                            // Production: OTP is sent via SMS, response likely has
+                            // `{"success": true}` with no `otp` key.
                             if let otp = json["otp"] as? String {
                                 self.otp = otp
-                                print("✅ OTP:", otp)
-                                self.authState = self.authState == .forgotPasscode ? .resetPasscode : .otpVerification
-                                
-                                
-                            } else {
-                                self.errorMessage = json["message"] as? String ?? "Unexpected response"
-                                print("❌ Error:", self.errorMessage ?? "")
+                                print("✅ OTP (dev):", otp)
                             }
+                            // Any successful response → go to OTP input
+                            self.authState = self.authState == .forgotPasscode ? .resetPasscode : .otpVerification
+                            print("➡️ Navigating to OTP screen")
+                            
                         }
                     } catch {
                         self.errorMessage = error.localizedDescription
@@ -248,17 +265,23 @@ class AuthManager: ObservableObject {
                                let userId = json["user_id"] as? Int {
                                 
                                 print("✅ Signup Success")
-                                print("Access Token:", accessToken)
-                                print("Token Type:", tokenType)
-                                print("User ID:", userId)
                                 
-                                // Save user data
+                                // Save tokens to Keychain (includes refresh + expiry)
+                                let refreshToken = json["refresh_token"] as? String ?? ""
+                                let expiresIn = json["expires_in"] as? TimeInterval ?? 3600
+                                TokenManager.shared.saveTokens(
+                                    access: accessToken,
+                                    refresh: refreshToken,
+                                    expiresIn: expiresIn
+                                )
+                                
+                                // Save user data (for backward compat + callers that read UserModel)
                                 let user = User(
                                     email: self.tempEmail,
                                     firstName: self.tempFullName,
                                     lastName: "",
                                     accessToken: accessToken,
-                                    refreshToken: "",
+                                    refreshToken: refreshToken,
                                     id: userId
                                 )
                                 UserModel.shared.saveUser(user)
@@ -322,12 +345,21 @@ class AuthManager: ObservableObject {
                                 
                                 print("✅ Login Success")
                                 
+                                // Save tokens to Keychain (includes refresh + expiry)
+                                let refreshToken = json["refresh_token"] as? String ?? ""
+                                let expiresIn = json["expires_in"] as? TimeInterval ?? 3600
+                                TokenManager.shared.saveTokens(
+                                    access: accessToken,
+                                    refresh: refreshToken,
+                                    expiresIn: expiresIn
+                                )
+                                
                                 let user = User(
                                     email: "",
                                     firstName: "",
                                     lastName: "",
                                     accessToken: accessToken,
-                                    refreshToken: "",
+                                    refreshToken: refreshToken,
                                     id: userId
                                 )
                                 UserModel.shared.saveUser(user)
@@ -541,6 +573,15 @@ class AuthManager: ObservableObject {
     // MARK: - Logout
     
     func logout() {
+        // Notify server (fire‑and‑forget — always clear local state)
+        ServiceModel.shared.postRequest(endpoint: WebService.authLogout) { _ in }
+
+        // Clear Keychain tokens
+        TokenManager.shared.clearTokens()
+
+        // Clear UserDefaults tokens
+        UserModel.shared.removeUser()
+
         UserDefaults.standard.set(false, forKey: "isAuthenticated")
         
         // Clear sensitive data

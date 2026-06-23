@@ -7,7 +7,9 @@ struct MapView: View {
 
     @EnvironmentObject var languageManager: LanguageManager
 
-    @StateObject private var locationManager = LocationManager()
+    @StateObject private var locationManager = FilteredLocationManager()
+    @StateObject private var dwellMonitor = DwellMonitor()
+    @StateObject private var signalCollector = SignalCollector()
     @StateObject private var weatherManager = WeatherManager()
 
     @State private var locations: [NearbyLocationResponse] = []
@@ -18,9 +20,9 @@ struct MapView: View {
     @State private var fogLoaded = false
     @State private var pendingUnlock: ZoneUnlockInfo? = nil
     @State private var showUnlockPopup = false
-    
+
     @State private var lastFetchCenter: CLLocationCoordinate2D?
-    
+
     // Mapbox camera control
     @State private var focusOn: MapCameraFocus?
     @State private var visibleRegion = VisibleMapRegion(
@@ -32,16 +34,17 @@ struct MapView: View {
     @State var successMessage: String = ""
     @State private var showAlert: Bool = false
     @State private var showSuccessAlert: Bool = false
-    @State private var checkInSuccess: Bool? = true
-    
+
     // MARK: Check-In State
-    @State private var isCheckingIn = false
+    @State private var isDwelling = false
     @State private var isValidating = false
-    @State private var elapsedTime = 0
-    @State private var progress: Double = 0
-    let checkInDuration = 10
-    
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    /// Last location we auto-centered the camera on (avoid fighting manual pans).
+    @State private var lastAutoCenter: CLLocationCoordinate2D?
+    /// Last location we fetched nearby merchants for.
+    @State private var lastFetchCoord: CLLocationCoordinate2D?
+
+    private let fraudStore = FraudEvidenceStore()
     
     var body: some View {
         ZStack {
@@ -51,7 +54,8 @@ struct MapView: View {
                 locations: $locations,
                 selectedLocation: $selectedLocation,
                 focusOn: $focusOn,
-                isCheckingIn: isCheckingIn,
+                merchantPolygon: selectedLocation?.boundary_polygon,
+                isCheckingIn: isDwelling,
                 onCameraChanged: { cameraState in
                     // Update visible region for fog overlay
                     visibleRegion = VisibleMapRegion(
@@ -139,7 +143,7 @@ struct MapView: View {
             }
             
             // MARK: Check-In Progress Card
-            if isCheckingIn, let location = selectedLocation {
+            if isDwelling, let location = selectedLocation {
                 CheckInProgressCard(
                     merchant: .init(
                         id: location.id, name: location.name,
@@ -148,23 +152,29 @@ struct MapView: View {
                         xpReward: location.xp_reward,
                         coordinate: location.coordinate,
                         can_checkin: location.can_checkin,
-                        imageUrl: WebService.resolvedImageUrl(location.image_url)
+                        imageUrl: WebService.resolvedImageUrl(location.image_url),
+                        kingUserId: location.king_user_id,
+                        kingFalconName: location.king_falcon_name,
+                        boundaryPolygon: location.boundary_polygon
                     ),
-                    progress: progress,
-                    remaining: checkInDuration - elapsedTime
+                    progress: dwellMonitor.progress,
+                    remaining: dwellMonitor.secondsRemaining,
+                    status: statusText(for: dwellMonitor.state)
                 ) {
-                    resetCheckIn()
+                    cancelDwell()
                 }
             }
             
             // MARK: Current Location Button
-            if !isCheckingIn {
+            if !isDwelling {
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
                         Button {
-                            if let location = locationManager.location {
+                            if let location = locationManager.currentLocation {
+                                // Force camera to user location regardless of distance threshold
+                                lastAutoCenter = location.coordinate
                                 withAnimation {
                                     moveToUser(location)
                                 }
@@ -185,12 +195,12 @@ struct MapView: View {
             }
 
             // MARK: Bottom Check-In
-            if !isCheckingIn, let location = selectedLocation {
+            if !isDwelling, let location = selectedLocation {
                 BottomCheckInCard(
                     merchant: location.asMerchant,
                     isLoading: isValidating
                 ) {
-                    startCheckIn(location)
+                    beginCheckIn(location)
                 }
             }
 
@@ -219,46 +229,118 @@ struct MapView: View {
         .onAppear {
             locationManager.requestPermission()
             fetchFogZones()
+            AntiCheatAPI.fetchThresholds()
         }
-        .onReceive(locationManager.$location.compactMap { $0 }) { location in
-            moveToUser(location)
-            fetchNearby(location.coordinate)
-            weatherManager.update(coordinate: location.coordinate)
-        }
-        .onReceive(timer) { _ in
-            guard isCheckingIn else { return }
-            
-            elapsedTime += 1
-            progress = Double(elapsedTime) / Double(checkInDuration)
-            
-            if elapsedTime >= checkInDuration {
-                completeCheckIn()
+        .onReceive(locationManager.$currentLocation.compactMap { $0 }) { location in
+            let coord = location.coordinate
+
+            // Auto-center only on first fix or when user has moved > 200m
+            // (prevents fighting manual map pans while still following the user).
+            if let last = lastAutoCenter {
+                let lastLoc = CLLocation(latitude: last.latitude, longitude: last.longitude)
+                let newLoc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+                if newLoc.distance(from: lastLoc) > 200 {
+                    moveToUser(location)
+                    lastAutoCenter = coord
+                }
+            } else {
+                moveToUser(location)
+                lastAutoCenter = coord
+            }
+
+            // Fetch nearby merchants only when moved > 5 km
+            if let lastFetch = lastFetchCoord {
+                let lastFetchLoc = CLLocation(latitude: lastFetch.latitude, longitude: lastFetch.longitude)
+                let newLoc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+                if newLoc.distance(from: lastFetchLoc) > 5000 {
+                    fetchNearby(coord)
+                    lastFetchCoord = coord
+                }
+            } else {
+                fetchNearby(coord)
+                lastFetchCoord = coord
+            }
+
+            weatherManager.update(coordinate: coord)
+
+            // Feed location into dwell monitor during active check-in
+            if isDwelling {
+                dwellMonitor.updateUserLocation(location)
             }
         }
+        .onReceive(dwellMonitor.$progress) { newProgress in
+            // progress is already @Published on dwellMonitor, read by CheckInProgressCard
+        }
+        .onReceive(dwellMonitor.$state) { state in
+            switch state {
+            case .verifiedDwell:
+                // Dwell completed — start collecting proof bundle
+                guard let location = selectedLocation else { return }
+                signalCollector.startCollection(
+                    for: location.id,
+                    dwellMonitor: dwellMonitor,
+                    locationManager: locationManager
+                )
+
+            case .submitted:
+                // Bundle was assembled — submit to server
+                if let bundle = signalCollector.bundle {
+                    submitProofBundle(bundle)
+                }
+
+            case .failed(let reason):
+                errorMessage = reason
+                showAlert = true
+                showSuccessAlert = false
+                cancelDwell()
+
+            case .idle:
+                break
+
+            default:
+                break
+            }
+        }
+        .onReceive(signalCollector.$bundle) { bundle in
+            guard let bundle, dwellMonitor.state == .submitted else { return }
+            submitProofBundle(bundle)
+        }
     }
-    
+
     // MARK: Helpers
-    
+
+    private func statusText(for state: DwellState) -> String {
+        switch state {
+        case .scanning:       return "Approaching merchant..."
+        case .dwelling:       return "Verifying visit..."
+        case .verifiedDwell:  return "Location verified! Checking in..."
+        case .collecting:     return "Finalizing check-in..."
+        case .submitted:      return "Complete!"
+        case .failed:         return "Check-in unavailable"
+        case .idle:           return ""
+        }
+    }
+
     private func handleMapDrag(_ newCenter: CLLocationCoordinate2D) {
         guard let lastCenter = lastFetchCenter else { return }
-        
+
         let old = CLLocation(latitude: lastCenter.latitude, longitude: lastCenter.longitude)
         let new = CLLocation(latitude: newCenter.latitude, longitude: newCenter.longitude)
         let distanceKM = old.distance(from: new) / 1000
-        
+
         if distanceKM >= 5 {
             fetchNearby(newCenter)
         }
     }
-    
+
     private func moveToUser(_ location: CLLocation) {
         focusOn = MapCameraFocus(
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
-            zoom: 10
+            zoom: 15
         )
     }
-    
+
     private func fetchNearby(_ coordinate: CLLocationCoordinate2D) {
         lastFetchCenter = coordinate
 
@@ -286,22 +368,39 @@ struct MapView: View {
             }
         }
     }
-    
-    // MARK: Check-In Actions
-    private func startCheckIn(_ location: NearbyLocationResponse) {
-        guard let userLocation = locationManager.location?.coordinate else { return }
+
+    // MARK: - Check-In Flow (Anti-Cheat)
+
+    private func beginCheckIn(_ location: NearbyLocationResponse) {
+        guard locationManager.currentLocation != nil else {
+            errorMessage = "Unable to determine your location. Please try again."
+            showAlert = true
+            return
+        }
+
         selectedLocation = location
         isValidating = true
 
-        LocationAPI.shared.checkIn(locationId: location.id, userCoordinate: userLocation, dryRun: true) { result in
+        // Step 1: Lightweight server pre-check (dryRun)
+        LocationAPI.shared.checkIn(
+            locationId: location.id,
+            userCoordinate: .init(latitude: location.latitude, longitude: location.longitude),
+            dryRun: true
+        ) { result in
             isValidating = false
+
             switch result {
             case .success:
+                // Step 2: Begin real dwell monitoring
                 withAnimation {
-                    isCheckingIn = true
-                    elapsedTime = 0
-                    progress = 0
+                    isDwelling = true
                 }
+                dwellMonitor.beginMonitoring(
+                    merchantCenter: location.coordinate,
+                    merchantRadiusMeters: Double(location.radius_meters),
+                    locationManager: locationManager
+                )
+
             case .failure(let error):
                 errorMessage = error.localizedDescription
                 showAlert = true
@@ -310,39 +409,99 @@ struct MapView: View {
             }
         }
     }
-    
-    private func resetCheckIn() {
+
+    private func cancelDwell() {
+        dwellMonitor.cancel()
+        signalCollector.cancel()
         withAnimation {
-            isCheckingIn = false
+            isDwelling = false
             selectedLocation = nil
-            elapsedTime = 0
-            progress = 0
         }
     }
-    
-    private func completeCheckIn() {
-        guard let location = selectedLocation,
-              let userLocation = locationManager.location?.coordinate else {
-            resetCheckIn()
-            return
-        }
 
-        LocationAPI.shared.checkIn(locationId: location.id, userCoordinate: userLocation, dryRun: false) { result in
+    private func submitProofBundle(_ bundle: ProofBundle) {
+        AntiCheatAPI.verifyCheckIn(bundle: bundle) { result in
             switch result {
-            case .success(let response):
-                print("🎉 Check-in success:", response.message)
-                successMessage = response.message
-                showSuccessAlert = true
-                showAlert = false
-                checkInSuccess = true
+            case .success(let verification):
+                handleVerification(verification)
+
             case .failure(let error):
-                print("❌ Check-in failed:", error.localizedDescription)
-                errorMessage = error.localizedDescription
+                // Queue offline and retry later
+                fraudStore.savePending(bundle: bundle)
+                errorMessage = "Check-in queued. Will retry when connected."
                 showAlert = true
                 showSuccessAlert = false
-                checkInSuccess = false
+                cancelDwell()
             }
-            resetCheckIn()
+        }
+    }
+
+    private func handleVerification(_ result: VerificationResult) {
+        // Save pre-check-in king info before cancelDwell clears selectedLocation
+        let oldKingId = selectedLocation?.king_user_id
+        let locId = selectedLocation?.id
+        let locName = selectedLocation?.name ?? ""
+
+        switch result.verdict {
+        case "approved":
+            successMessage = result.reason_codes.first ?? "Check-in successful!"
+            showSuccessAlert = true
+            showAlert = false
+            print("✅ Check-in approved: \(result.confidence_score) confidence, +\(result.xp_earned) XP")
+
+            // Check if the user was dethroned (old king was the current user, now someone else)
+            if oldKingId == UserModel.shared.user?.id, let lid = locId {
+                checkDethroned(locationId: lid, locationName: locName)
+            }
+
+        case "shadow_queue":
+            successMessage = "Visit recorded! Rewards pending review."
+            showSuccessAlert = true
+            showAlert = false
+            print("⏳ Check-in shadow-queued: \(result.confidence_score) confidence")
+            for flag in result.fraud_flags {
+                print("   ⚑ \(flag.signal): \(flag.severity) — \(flag.description)")
+            }
+
+        case "rejected":
+            let reasons = result.reason_codes.joined(separator: ", ")
+            errorMessage = reasons.isEmpty ? "Check-in could not be verified." : reasons
+            showAlert = true
+            showSuccessAlert = false
+            print("❌ Check-in rejected: \(result.confidence_score) confidence")
+            for flag in result.fraud_flags {
+                print("   ⚑ \(flag.signal): \(flag.severity) — \(flag.description)")
+            }
+
+        default:
+            errorMessage = "Unexpected response. Please try again."
+            showAlert = true
+            showSuccessAlert = false
+        }
+
+        cancelDwell()
+    }
+
+    private func checkDethroned(locationId: Int, locationName: String) {
+        // Re-fetch nearby to get fresh king info
+        guard let coord = locationManager.currentLocation?.coordinate else { return }
+
+        LocationAPI.shared.fetchNearby(
+            latitude: coord.latitude,
+            longitude: coord.longitude
+        ) { items, _ in
+            guard let updated = items.first(where: { $0.id == locationId }),
+                  updated.king_user_id != UserModel.shared.user?.id,
+                  updated.king_falcon_name != nil
+            else { return }
+
+            // User was dethroned — show alert
+            let msg = String(
+                format: languageManager.text("map.dethroned"),
+                locationName
+            )
+            errorMessage = msg
+            showAlert = true
         }
     }
     
@@ -445,10 +604,18 @@ struct MerchantMarkerView: View {
                 Text(merchant.emoji)
                     .font(.system(size: 24))
             }
+
+            // Crown indicator for the king's pin
+            if merchant.kingFalconName != nil {
+                Text("👑")
+                    .font(.system(size: 14))
+                    .position(x: 40, y: 6)
+            }
         }
         .onAppear { pulse = true }
         .scaleEffect(isActive ? 1.15 : 1)
     }
+
 }
 
 // MARK: - Check-In Progress Card
@@ -457,8 +624,9 @@ struct CheckInProgressCard: View {
     let merchant: MerchantLocation
     let progress: Double
     let remaining: Int
+    let status: String
     let onCancel: () -> Void
-    
+
     var body: some View {
         VStack {
             VStack(spacing: 16) {
@@ -479,28 +647,33 @@ struct CheckInProgressCard: View {
                             .fontWeight(.bold)
                             .foregroundColor(.white)
 
-                        Text("Checking in...")
+                        Text(status)
+                            .font(.caption)
                             .foregroundColor(.white.opacity(0.8))
                     }
-                    
+
                     Spacer()
                 }
-                
+
                 ProgressView(value: progress)
                     .progressViewStyle(
                         LinearProgressViewStyle(tint: .white)
                     )
-                
+
                 HStack {
                     Text("\(Int(progress * 100))%")
                     Spacer()
-                    Text("\(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                    if remaining > 0 {
+                        Text("\(remaining / 60):\(String(format: "%02d", remaining % 60))")
+                    }
                 }
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.8))
-                
-                Button("Cancel Check-in", action: onCancel)
-                    .foregroundColor(.white)
+
+                if remaining > 0 {
+                    Button("Cancel Check-in", action: onCancel)
+                        .foregroundColor(.white)
+                }
             }
             .padding()
             .background(Color.green)
@@ -524,6 +697,21 @@ struct BottomCheckInCard: View {
             Spacer()
             
             VStack(spacing: 16) {
+                // King banner (👑 large + bold above everything)
+                if let kingName = merchant.kingFalconName {
+                    HStack(spacing: 8) {
+                        Text("👑")
+                            .font(.system(size: 22))
+                        Text(kingName)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(Color(red: 0.85, green: 0.65, blue: 0.12))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color(red: 0.85, green: 0.65, blue: 0.12).opacity(0.08))
+                    .cornerRadius(12)
+                }
+
                 HStack(spacing: 16) {
                     if let urlStr = merchant.imageUrl, let url = URL(string: urlStr) {
                         KFImage(url)
@@ -614,6 +802,13 @@ struct MerchantLocation: Identifiable {
     let coordinate: CLLocationCoordinate2D
     let can_checkin: Bool
     let imageUrl: String?
+
+    // King / ownership
+    let kingUserId: Int?
+    let kingFalconName: String?
+
+    // Polygon boundary (for rendering)
+    let boundaryPolygon: [PolygonPoint]?
 }
 
 extension NearbyLocationResponse {
@@ -626,7 +821,10 @@ extension NearbyLocationResponse {
             xpReward: xp_reward,
             coordinate: coordinate,
             can_checkin: can_checkin,
-            imageUrl: WebService.resolvedImageUrl(image_url)
+            imageUrl: WebService.resolvedImageUrl(image_url),
+            kingUserId: king_user_id,
+            kingFalconName: king_falcon_name,
+            boundaryPolygon: boundary_polygon
         )
     }
 }

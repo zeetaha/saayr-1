@@ -40,6 +40,8 @@ class WebService {
     static var login           = baseUrl + "auth/login"
     static var forgotPasscode  = baseUrl + "auth/forgot-passcode"
     static var resetPasscode   = baseUrl + "auth/reset-passcode"
+    static var authRefresh     = baseUrl + "auth/refresh"
+    static var authLogout      = baseUrl + "auth/logout"
 
     // MARK: - Locations
     static var nearBy  = baseUrl + "locations/nearby"
@@ -74,6 +76,11 @@ class WebService {
     static var rewardsCatalog = baseUrl + "rewards/catalog"
     static var redeemReward   = baseUrl + "rewards/redeem"
     static var weeklyTop3     = baseUrl + "user/weekly-top3"
+
+    // MARK: - Anti-Cheat
+    static var verifyCheckin = baseUrl + "anticheat/verify-checkin"
+    static var fraudReport   = baseUrl + "anticheat/fraud-report"
+    static var thresholds    = baseUrl + "anticheat/thresholds"
 
     // MARK: - Challenges & Health
     static var challenges   = baseUrl + "missions/challenges"

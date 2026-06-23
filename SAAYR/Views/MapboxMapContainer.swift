@@ -30,6 +30,7 @@ struct MapboxMapContainer: UIViewRepresentable {
     @Binding var selectedLocation: NearbyLocationResponse?
     @Binding var focusOn: MapCameraFocus?
 
+    var merchantPolygon: [PolygonPoint]?
     var isCheckingIn: Bool
     var onCameraChanged: (MapboxCameraState) -> Void
     var onTapLocation: (NearbyLocationResponse) -> Void
@@ -89,6 +90,11 @@ struct MapboxMapContainer: UIViewRepresentable {
             selectedId: selectedLocation?.id
         )
 
+        context.coordinator.syncPolygon(
+            mapView: mapView,
+            polygon: merchantPolygon
+        )
+
         // ✅ SAFE focus handling
         if let focus = focusOn {
 
@@ -124,6 +130,10 @@ struct MapboxMapContainer: UIViewRepresentable {
         private var lastDigest: Int = -1
 
         var cameraObserver: Cancelable?
+
+        // Polygon annotation state
+        private var polygonManager: PolygonAnnotationManager?
+        private var currentPolygonDigest: Int = -1
 
         init(parent: MapboxMapContainer) {
             self.parent = parent
@@ -202,6 +212,39 @@ struct MapboxMapContainer: UIViewRepresentable {
             else { return }
 
             parent.onTapLocation(location)
+        }
+
+        // MARK: - Polygon Annotation
+
+        func syncPolygon(mapView: MapboxMaps.MapView, polygon: [PolygonPoint]?) {
+            // Compute digest to avoid redundant updates
+            let digest = polygon?.hashValue ?? -1
+            guard digest != currentPolygonDigest else { return }
+            currentPolygonDigest = digest
+
+            // Remove existing polygon if present
+            if polygonManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "merchant-polygon")
+                polygonManager = nil
+            }
+
+            guard let points = polygon, points.count >= 3 else { return }
+
+            let coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+            let outerRing = Ring(coordinates: coords)
+            let polygonShape = Polygon(outerRing: outerRing, innerRings: [])
+
+            var annotation = PolygonAnnotation(polygon: polygonShape)
+            annotation.fillColor = StyleColor(red: 34, green: 139, blue: 34, alpha: 0.15)
+            annotation.fillOutlineColor = StyleColor(red: 34, green: 139, blue: 34, alpha: 1.0)
+
+            do {
+                let manager = try mapView.annotations.makePolygonAnnotationManager(id: "merchant-polygon")
+                manager.annotations = [annotation]
+                polygonManager = manager
+            } catch {
+                print("⚠️ Failed to create polygon annotation: \(error)")
+            }
         }
     }
 }

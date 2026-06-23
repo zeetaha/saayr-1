@@ -172,7 +172,7 @@ final class HealthKitManager: ObservableObject {
     /// background execution window (Alamofire sessions may be suspended).
     private func sendStepsToAPI(steps: Int, date: Date, source: String = "healthkit", completion: (() -> Void)? = nil) {
         guard
-            let token = UserModel.shared.user?.accessToken,
+            let token = UserModel.shared.currentAccessToken,
             !token.isEmpty
         else {
             print("⚠️ No auth token — skipping step sync")

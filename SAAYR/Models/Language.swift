@@ -109,6 +109,8 @@ struct Translations {
         "map.title": "Map",
         "map.nearbyLocations": "Nearby Locations",
         "map.checkIn": "Check In",
+        "map.king": "King",
+        "map.dethroned": "You've been dethroned at %@!",
         
         // PVP
         "pvp.title": "Battle Arena",
@@ -209,6 +211,8 @@ struct Translations {
         "map.title": "الخريطة",
         "map.nearbyLocations": "المواقع القريبة",
         "map.checkIn": "تسجيل الحضور",
+        "map.king": "الملك",
+        "map.dethroned": "!تم خلعك من موقع %@",
         
         // PVP
         "pvp.title": "ساحة المعركة",
