@@ -1,5 +1,5 @@
 import SwiftUI
-import MapKit
+import CoreLocation
 import Combine
 import Kingfisher
 
@@ -10,7 +10,6 @@ struct MapView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var weatherManager = WeatherManager()
 
-    @State private var region = MKCoordinateRegion()
     @State private var locations: [NearbyLocationResponse] = []
     @State private var selectedLocation: NearbyLocationResponse?
 
@@ -21,73 +20,58 @@ struct MapView: View {
     @State private var showUnlockPopup = false
     
     @State private var lastFetchCenter: CLLocationCoordinate2D?
-    @State private var trackingMode: MapUserTrackingMode = .follow
     
-    var equatableCenter: MapCenter {
-        MapCenter(
-            latitude: region.center.latitude,
-            longitude: region.center.longitude
-        )
-    }
-    
+    // Mapbox camera control
+    @State private var focusOn: MapCameraFocus?
+    @State private var visibleRegion = VisibleMapRegion(
+        centerLat: 24.7136, centerLng: 46.6753,   // Riyadh default
+        latDelta: 0.5, lngDelta: 0.5
+    )
+
     @State var errorMessage: String = ""
     @State var successMessage: String = ""
     @State private var showAlert: Bool = false
-    @State private var showSuccessAlert: Bool = false // Separate success indicator
-    @State private var checkInSuccess: Bool? = true // nil: pending, true: success, false: failure
-    
+    @State private var showSuccessAlert: Bool = false
+    @State private var checkInSuccess: Bool? = true
     
     // MARK: Check-In State
     @State private var isCheckingIn = false
     @State private var isValidating = false
     @State private var elapsedTime = 0
     @State private var progress: Double = 0
-    let checkInDuration = 10   // example 5 sec for demo; can be 120
+    let checkInDuration = 10
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    
-    
     
     var body: some View {
         ZStack {
             
-            // MARK: Map
-            Map(
-                coordinateRegion: $region,
-                interactionModes: .all,
-                showsUserLocation: true,
-                userTrackingMode: $trackingMode,
-                annotationItems: locations
-            ) { item in
-                MapAnnotation(coordinate: item.coordinate) {
-                    MerchantMarkerView(
-                        merchant: .init(
-                            id: item.id, name: item.name,
-                            category: item.category,
-                            emoji: "📍",
-                            xpReward: item.xp_reward,
-                            coordinate: item.coordinate,
-                            can_checkin: item.can_checkin,
-                            imageUrl: WebService.resolvedImageUrl(item.image_url)
-                        ),
-                        isInRange: true,
-                        isActive: selectedLocation?.id == item.id,
-                        isPartner: item.is_partner
+            // MARK: Map (Mapbox)
+            MapboxMapContainer(
+                locations: $locations,
+                selectedLocation: $selectedLocation,
+                focusOn: $focusOn,
+                isCheckingIn: isCheckingIn,
+                onCameraChanged: { cameraState in
+                    // Update visible region for fog overlay
+                    visibleRegion = VisibleMapRegion(
+                        centerLat: cameraState.center.latitude,
+                        centerLng: cameraState.center.longitude,
+                        latDelta: cameraState.north - cameraState.south,
+                        lngDelta: cameraState.east - cameraState.west
                     )
-                    .onTapGesture {
-                        // Block switching pins while a check-in is in progress
-                        guard !isCheckingIn else { return }
-                        selectedLocation = item
-                    }
+                    // Trigger nearby fetch when dragged far enough
+                    handleMapDrag(cameraState.center)
+                },
+                onTapLocation: { location in
+                    selectedLocation = location
                 }
-            }
+            )
             .ignoresSafeArea()
-
-           
 
             // MARK: Fog of War
             if fogLoaded {
-                FogOverlayView(zones: fogZones, region: region)
+                FogOverlayView(zones: fogZones, visibleRegion: visibleRegion)
                     .transition(.opacity)
                     .animation(.easeIn(duration: 0.5), value: fogLoaded)
             }
@@ -95,7 +79,7 @@ struct MapView: View {
             // MARK: Weather Overlay
             WeatherOverlayView(condition: weatherManager.condition)
             
-            // MARK: HeaderCard - Only show after API response
+            // MARK: HeaderCard
             if !locations.isEmpty && !showSuccessAlert && !showAlert{
                 VStack {
                     HeaderCard(nearbyCount: locations.count, weatherData: weatherManager.data)
@@ -104,6 +88,7 @@ struct MapView: View {
                 .animation(.easeIn, value: locations.count)
             }
             
+            // MARK: Success Banner
             if showSuccessAlert {
                 VStack {
                     Text(successMessage)
@@ -113,7 +98,7 @@ struct MapView: View {
                         .background(Color.green)
                         .cornerRadius(8)
                         .padding(.horizontal)
-                        .padding(.top, 12) // Safe area padding
+                        .padding(.top, 12)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .zIndex(1)
                         .onAppear {
@@ -126,10 +111,9 @@ struct MapView: View {
                         }
                     Spacer()
                 }
-                
             }
             
-            // Error Banner
+            // MARK: Error Banner
             else if showAlert {
                 VStack{
                     Text(errorMessage)
@@ -154,9 +138,6 @@ struct MapView: View {
                 }
             }
             
-            
-            
-            
             // MARK: Check-In Progress Card
             if isCheckingIn, let location = selectedLocation {
                 CheckInProgressCard(
@@ -176,8 +157,6 @@ struct MapView: View {
                 }
             }
             
-            
-            
             // MARK: Current Location Button
             if !isCheckingIn {
                 VStack {
@@ -188,7 +167,6 @@ struct MapView: View {
                             if let location = locationManager.location {
                                 withAnimation {
                                     moveToUser(location)
-                                    trackingMode = .follow
                                 }
                             }
                         } label: {
@@ -225,9 +203,10 @@ struct MapView: View {
                     withAnimation(.easeInOut) {
                         showUnlockPopup = false
                         pendingUnlock = nil
-                        region = MKCoordinateRegion(
-                            center: zoneCenter,
-                            span: .init(latitudeDelta: 0.15, longitudeDelta: 0.15)
+                        focusOn = MapCameraFocus(
+                            latitude: zoneCenter.latitude,
+                            longitude: zoneCenter.longitude,
+                            zoom: 12
                         )
                     }
                     fetchFogZones()
@@ -245,15 +224,6 @@ struct MapView: View {
             moveToUser(location)
             fetchNearby(location.coordinate)
             weatherManager.update(coordinate: location.coordinate)
-        }
-        
-        .onChange(of: equatableCenter) { newCenter in
-            handleMapDrag(
-                CLLocationCoordinate2D(
-                    latitude: newCenter.latitude,
-                    longitude: newCenter.longitude
-                )
-            )
         }
         .onReceive(timer) { _ in
             guard isCheckingIn else { return }
@@ -282,9 +252,10 @@ struct MapView: View {
     }
     
     private func moveToUser(_ location: CLLocation) {
-        region = MKCoordinateRegion(
-            center: location.coordinate,
-            span: .init(latitudeDelta: 0.5, longitudeDelta: 0.5)
+        focusOn = MapCameraFocus(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            zoom: 10
         )
     }
     
@@ -317,7 +288,6 @@ struct MapView: View {
     }
     
     // MARK: Check-In Actions
-    // Step 1: validate with dryRun: false, then show progress card on success
     private func startCheckIn(_ location: NearbyLocationResponse) {
         guard let userLocation = locationManager.location?.coordinate else { return }
         selectedLocation = location
@@ -341,7 +311,6 @@ struct MapView: View {
         }
     }
     
-    // Reset check-in state
     private func resetCheckIn() {
         withAnimation {
             isCheckingIn = false
@@ -351,7 +320,6 @@ struct MapView: View {
         }
     }
     
-    // Step 2: called when timer finishes — actual check-in with dryRun: true
     private func completeCheckIn() {
         guard let location = selectedLocation,
               let userLocation = locationManager.location?.coordinate else {
@@ -367,7 +335,6 @@ struct MapView: View {
                 showSuccessAlert = true
                 showAlert = false
                 checkInSuccess = true
-                // TODO: show popup / update XP / level
             case .failure(let error):
                 print("❌ Check-in failed:", error.localizedDescription)
                 errorMessage = error.localizedDescription
@@ -375,13 +342,13 @@ struct MapView: View {
                 showSuccessAlert = false
                 checkInSuccess = false
             }
-            
-            // Finally reset the UI
             resetCheckIn()
         }
     }
     
 }
+
+// MARK: - Header Card
 
 struct HeaderCard: View {
     let nearbyCount: Int
@@ -431,6 +398,7 @@ struct HeaderCard: View {
     }
 }
 
+// MARK: - Merchant Marker
 
 struct MerchantMarkerView: View {
     let merchant: MerchantLocation
@@ -482,6 +450,9 @@ struct MerchantMarkerView: View {
         .scaleEffect(isActive ? 1.15 : 1)
     }
 }
+
+// MARK: - Check-In Progress Card
+
 struct CheckInProgressCard: View {
     let merchant: MerchantLocation
     let progress: Double
@@ -541,6 +512,8 @@ struct CheckInProgressCard: View {
     }
 }
 
+// MARK: - Bottom Check-In Card
+
 struct BottomCheckInCard: View {
     let merchant: MerchantLocation
     var isLoading: Bool = false
@@ -552,7 +525,6 @@ struct BottomCheckInCard: View {
             
             VStack(spacing: 16) {
                 HStack(spacing: 16) {
-                    // Merchant image or fallback emoji
                     if let urlStr = merchant.imageUrl, let url = URL(string: urlStr) {
                         KFImage(url)
                             .resizable()
@@ -565,13 +537,11 @@ struct BottomCheckInCard: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        // Merchant Name
                         HStack(spacing: 8) {
                             Text(merchant.name)
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.black)
                             
-                            // Partner Badge
                             if merchant.category.lowercased() == "café" || merchant.category.lowercased() == "fast food" {
                                 Text("Partner")
                                     .font(.system(size: 10, weight: .bold))
@@ -585,12 +555,10 @@ struct BottomCheckInCard: View {
                             }
                         }
                         
-                        // Category
                         Text(merchant.category)
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
                         
-                        // In-Range Indicator
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill")
                                 .resizable()
@@ -635,6 +603,7 @@ struct BottomCheckInCard: View {
     }
 }
 
+// MARK: - MerchantLocation model
 
 struct MerchantLocation: Identifiable {
     let id: Int
@@ -646,6 +615,7 @@ struct MerchantLocation: Identifiable {
     let can_checkin: Bool
     let imageUrl: String?
 }
+
 extension NearbyLocationResponse {
     var asMerchant: MerchantLocation {
         MerchantLocation(
@@ -661,9 +631,8 @@ extension NearbyLocationResponse {
     }
 }
 
-
 struct MerchantWithDistance: Identifiable {
-    let id = UUID()           // Make it Identifiable
+    let id = UUID()
     let merchant: MerchantLocation
     let distance: Double
 }
@@ -672,17 +641,15 @@ struct MerchantWithDistance: Identifiable {
 
 struct FogOverlayView: View {
     let zones: [Zone]
-    let region: MKCoordinateRegion
+    let visibleRegion: VisibleMapRegion
 
     var body: some View {
         Canvas { ctx, size in
             var path = Path()
-            // Full-screen dark rectangle
             path.addRect(CGRect(x: -200, y: -200, width: size.width + 400, height: size.height + 400))
-            // Punch a transparent hole for each unlocked zone (even-odd rule)
             for zone in zones where zone.is_unlocked {
                 let pts = zone.boundary_polygon.map {
-                    mapPoint(lat: $0.lat, lng: $0.lng, region: region, size: size)
+                    mapPoint(lat: $0.lat, lng: $0.lng, size: size)
                 }
                 guard let first = pts.first else { continue }
                 path.move(to: first)
@@ -695,12 +662,11 @@ struct FogOverlayView: View {
         .ignoresSafeArea()
     }
 
-    // Linear lat/lng → screen-pixel conversion (accurate enough at city scale)
-    private func mapPoint(lat: Double, lng: Double, region: MKCoordinateRegion, size: CGSize) -> CGPoint {
-        let minLat = region.center.latitude  - region.span.latitudeDelta  / 2
-        let maxLat = region.center.latitude  + region.span.latitudeDelta  / 2
-        let minLng = region.center.longitude - region.span.longitudeDelta / 2
-        let maxLng = region.center.longitude + region.span.longitudeDelta / 2
+    private func mapPoint(lat: Double, lng: Double, size: CGSize) -> CGPoint {
+        let minLat = visibleRegion.centerLat - visibleRegion.latDelta / 2
+        let maxLat = visibleRegion.centerLat + visibleRegion.latDelta / 2
+        let minLng = visibleRegion.centerLng - visibleRegion.lngDelta / 2
+        let maxLng = visibleRegion.centerLng + visibleRegion.lngDelta / 2
         let latRange = maxLat - minLat
         let lngRange = maxLng - minLng
         guard latRange != 0, lngRange != 0 else { return .zero }
@@ -723,7 +689,6 @@ struct ZoneUnlockPopup: View {
             Color.black.opacity(0.55).ignoresSafeArea()
             FogLiftParticles()
             VStack(spacing: 24) {
-                // Icon
                 ZStack {
                     Circle()
                         .fill(LinearGradient(

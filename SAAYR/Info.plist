@@ -27,5 +27,9 @@
 	<!-- Motion / CMPedometer -->
 	<key>NSMotionUsageDescription</key>
 	<string>SAAYR uses motion data to count your steps accurately in real time during activity.</string>
+
+	<!-- Mapbox Access Token (https://account.mapbox.com/access-tokens/) -->
+	<key>MBXAccessToken</key>
+	<string>$(MAPBOX_ACCESS_TOKEN)</string>
 </dict>
 </plist>
