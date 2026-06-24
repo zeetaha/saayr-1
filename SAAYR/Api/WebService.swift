@@ -78,9 +78,9 @@ class WebService {
     static var weeklyTop3     = baseUrl + "user/weekly-top3"
 
     // MARK: - Anti-Cheat
-    static var verifyCheckin = baseUrl + "locations/verify-checkin"
-    static var fraudReport   = baseUrl + "anticheat/fraud-report"
-    static var thresholds    = baseUrl + "anticheat/thresholds"
+//    static var verifyCheckin = baseUrl + "locations/verify-checkin"
+//    static var fraudReport   = baseUrl + "anticheat/fraud-report"
+//    static var thresholds    = baseUrl + "anticheat/thresholds"
 
     // MARK: - Challenges & Health
     static var challenges   = baseUrl + "missions/challenges"

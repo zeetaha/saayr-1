@@ -8,8 +8,6 @@ struct MapView: View {
     @EnvironmentObject var languageManager: LanguageManager
 
     @StateObject private var locationManager = FilteredLocationManager()
-    @StateObject private var dwellMonitor = DwellMonitor()
-    @StateObject private var signalCollector = SignalCollector()
     @StateObject private var weatherManager = WeatherManager()
 
     @State private var locations: [NearbyLocationResponse] = []
@@ -38,6 +36,10 @@ struct MapView: View {
     // MARK: Check-In State
     @State private var isDwelling = false
     @State private var isValidating = false
+    @State private var isSubmittingFinalCheckIn = false
+    @State private var checkInProgress: Double = 0.0
+    @State private var checkInRemainingSeconds: Int = 0
+    @State private var checkInTimer: Timer? = nil
 
     /// Last location we auto-centered the camera on (avoid fighting manual pans).
     @State private var lastAutoCenter: CLLocationCoordinate2D?
@@ -157,9 +159,9 @@ struct MapView: View {
                         kingFalconName: location.king_falcon_name,
                         boundaryPolygon: location.boundary_polygon
                     ),
-                    progress: dwellMonitor.progress,
-                    remaining: dwellMonitor.secondsRemaining,
-                    status: statusText(for: dwellMonitor.state)
+                    progress: checkInProgress,
+                    remaining: checkInRemainingSeconds,
+                    status: statusText()
                 ) {
                     cancelDwell()
                 }
@@ -229,7 +231,6 @@ struct MapView: View {
         .onAppear {
             locationManager.requestPermission()
             fetchFogZones()
-            AntiCheatAPI.fetchThresholds()
         }
         .onReceive(locationManager.$currentLocation.compactMap { $0 }) { location in
             let coord = location.coordinate
@@ -263,62 +264,19 @@ struct MapView: View {
 
             weatherManager.update(coordinate: coord)
 
-            // Feed location into dwell monitor during active check-in
-            if isDwelling {
-                dwellMonitor.updateUserLocation(location)
-            }
-        }
-        .onReceive(dwellMonitor.$progress) { newProgress in
-            // progress is already @Published on dwellMonitor, read by CheckInProgressCard
-        }
-        .onReceive(dwellMonitor.$state) { state in
-            switch state {
-            case .verifiedDwell:
-                // Dwell completed — start collecting proof bundle
-                guard let location = selectedLocation else { return }
-                signalCollector.startCollection(
-                    for: location.id,
-                    dwellMonitor: dwellMonitor,
-                    locationManager: locationManager
-                )
-
-            case .submitted:
-                // Bundle was assembled — submit to server
-                if let bundle = signalCollector.bundle {
-                    submitProofBundle(bundle)
-                }
-
-            case .failed(let reason):
-                errorMessage = reason
-                showAlert = true
-                showSuccessAlert = false
-                cancelDwell()
-
-            case .idle:
-                break
-
-            default:
-                break
-            }
-        }
-        .onReceive(signalCollector.$bundle) { bundle in
-            guard let bundle, dwellMonitor.state == .submitted else { return }
-            submitProofBundle(bundle)
         }
     }
 
     // MARK: Helpers
 
-    private func statusText(for state: DwellState) -> String {
-        switch state {
-        case .scanning:       return "Approaching merchant..."
-        case .dwelling:       return "Verifying visit..."
-        case .verifiedDwell:  return "Location verified! Checking in..."
-        case .collecting:     return "Finalizing check-in..."
-        case .submitted:      return "Complete!"
-        case .failed:         return "Check-in unavailable"
-        case .idle:           return ""
+    private func statusText() -> String {
+        if isSubmittingFinalCheckIn {
+            return "Submitting check-in..."
         }
+        if isDwelling {
+            return "Verifying visit..."
+        }
+        return ""
     }
 
     private func handleMapDrag(_ newCenter: CLLocationCoordinate2D) {
@@ -391,15 +349,7 @@ struct MapView: View {
 
             switch result {
             case .success:
-                // Step 2: Begin real dwell monitoring
-                withAnimation {
-                    isDwelling = true
-                }
-                dwellMonitor.beginMonitoring(
-                    merchantCenter: location.coordinate,
-                    merchantRadiusMeters: Double(location.radius_meters),
-                    locationManager: locationManager
-                )
+                startCheckInTimer()
 
             case .failure(let error):
                 errorMessage = error.localizedDescription
@@ -411,22 +361,32 @@ struct MapView: View {
     }
 
     private func cancelDwell() {
-        dwellMonitor.cancel()
-        signalCollector.cancel()
+        stopCheckInTimer()
+        isSubmittingFinalCheckIn = false
+        isValidating = false
+        checkInProgress = 0
+        checkInRemainingSeconds = 0
         withAnimation {
             isDwelling = false
             selectedLocation = nil
         }
     }
 
-    private func submitProofBundle(_ bundle: ProofBundle) {
-        guard let location = selectedLocation else { return }
+    private func submitFinalCheckIn() {
+        guard let location = selectedLocation,
+              !isSubmittingFinalCheckIn else { return }
+
+        isSubmittingFinalCheckIn = true
+        isValidating = true
 
         LocationAPI.shared.checkIn(
             locationId: location.id,
             userCoordinate: .init(latitude: location.latitude, longitude: location.longitude),
             dryRun: false
         ) { result in
+            isValidating = false
+            isSubmittingFinalCheckIn = false
+
             switch result {
             case .success:
                 successMessage = "Check-in successful!"
@@ -437,10 +397,6 @@ struct MapView: View {
                 let locId = selectedLocation?.id
                 let locName = selectedLocation?.name ?? ""
 
-                showSuccessAlert = true
-                showAlert = false
-
-                // Check if the user was dethroned (old king was the current user, now someone else)
                 if oldKingId == UserModel.shared.user?.id, let lid = locId {
                     checkDethroned(locationId: lid, locationName: locName)
                 }
@@ -451,6 +407,37 @@ struct MapView: View {
                 showAlert = true
                 showSuccessAlert = false
                 cancelDwell()
+            }
+        }
+    }
+
+    private func startCheckInTimer() {
+        withAnimation {
+            isDwelling = true
+        }
+        checkInProgress = 0
+        checkInRemainingSeconds = 30
+
+        stopCheckInTimer()
+        checkInTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            checkInTick()
+        }
+    }
+
+    private func stopCheckInTimer() {
+        checkInTimer?.invalidate()
+        checkInTimer = nil
+    }
+
+    private func checkInTick() {
+        DispatchQueue.main.async {
+            guard isDwelling else { return }
+            checkInRemainingSeconds = max(checkInRemainingSeconds - 1, 0)
+            checkInProgress = min(1.0, checkInProgress + (1.0 / 30.0))
+
+            if checkInRemainingSeconds <= 0 {
+                stopCheckInTimer()
+                submitFinalCheckIn()
             }
         }
     }

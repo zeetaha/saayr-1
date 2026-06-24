@@ -63,7 +63,8 @@ final class DwellMonitor: ObservableObject {
     func beginMonitoring(
         merchantCenter: CLLocationCoordinate2D,
         merchantRadiusMeters: Double,
-        locationManager: FilteredLocationManager
+        locationManager: FilteredLocationManager,
+        forceStart: Bool = false
     ) {
         // Apply remote thresholds
         let config = AntiCheatAPI.thresholds
@@ -85,6 +86,11 @@ final class DwellMonitor: ObservableObject {
             print("🔄 DwellMonitor: recovered interrupted dwell for location \(restored.locationId)")
             checkInStore.clear()
             state = .idle
+        }
+
+        if forceStart {
+            startDwelling()
+            return
         }
 
         // Immediately evaluate current location (helps when the user's
@@ -178,24 +184,21 @@ final class DwellMonitor: ObservableObject {
 
     private func startDwelling() {
         dwellStartDate = Date()
-        DispatchQueue.main.async {
-            self.state = .dwelling(startedAt: self.dwellStartDate!)
-        }
+        state = .dwelling(startedAt: dwellStartDate!)
         consecutiveInside = 0
         dwellElapsed = 0
+        progress = 0
+        secondsRemaining = dwellSecondsMin
 
         checkInStore.saveDwellState(locationId: 0, startedAt: dwellStartDate!)
 
         // Start the progress timer
         dwellTimer?.invalidate()
-        // Create a timer and add it to the main run loop to ensure UI updates
-        // are delivered on the main thread.
-        dwellTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.tick()
         }
-        if let timer = dwellTimer {
-            RunLoop.main.add(timer, forMode: .common)
-        }
+        dwellTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func tick() {

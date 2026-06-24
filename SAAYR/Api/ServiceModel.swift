@@ -422,6 +422,7 @@ class ServiceModel {
         // Prefer Keychain‑stored token (refreshed, always current)
         if let token = TokenManager.shared.accessToken ?? UserModel.shared.user?.accessToken {
             headers["Authorization"] = "Bearer \(token)"
+            print("Bearer \(token)")
         }
         headers["Language-Code"] = UserModel.shared.languageCode
         headers["App-Version"]   = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"

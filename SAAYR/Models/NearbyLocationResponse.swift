@@ -173,69 +173,126 @@ struct CheckInResponse: Codable {
 
 
 final class LocationAPI {
-
+    
     static let shared = LocationAPI()
-
+    
+    // MARK: - Caching & Debouncing
+    private var cachedNearby: [NearbyLocationResponse] = []
+    private var cacheTimestamp: Date? = nil
+    private let cacheExpiry: TimeInterval = 600 // 10 minutes
+    private let debounceInterval: TimeInterval = 1.0 // 1 second
+    private var lastFetchTime: Date? = nil
+    private var pendingFetchTask: Task<Void, Never>? = nil
+    
+    // Request deduplication
+    private var inFlightCheckIns: Set<String> = []
+    
     func fetchNearby(
         latitude: Double,
         longitude: Double,
         radiusKM: Int = 5,
         completion: @escaping @Sendable ([NearbyLocationResponse], ZoneUnlockInfo?) -> Void
     ) {
+        // Check if cache is fresh (skip API call)
+        if let timestamp = cacheTimestamp,
+           Date().timeIntervalSince(timestamp) < cacheExpiry {
+            DispatchQueue.main.async {
+                completion(self.cachedNearby, nil)
+            }
+            return
+        }
+        
+        // Debounce rapid requests
+        if let lastFetch = lastFetchTime,
+           Date().timeIntervalSince(lastFetch) < debounceInterval {
+            return
+        }
+        
+        lastFetchTime = Date()
+        
         let params: [String: Any] = [
             "latitude": latitude,
             "longitude": longitude,
             "radius_km": radiusKM
         ]
-
+        
         ServiceModel.shared.postRequest(
             endpoint: WebService.nearBy,
-            parameters: params
-        ) { result in
-            switch result {
-            case .success(let data):
-                // Try new envelope format first, fall back to legacy array
-                if let envelope = try? JSONDecoder().decode(NearbyAPIResponse.self, from: data) {
-                    DispatchQueue.main.async {
-                        completion(envelope.locations, envelope.newly_unlocked_zone)
+            parameters: params,
+            completion: { result in
+                switch result {
+                case .success(let data):
+                    do {
+                        // Try new envelope format first, fall back to legacy array
+                        if let envelope = try? JSONDecoder().decode(NearbyAPIResponse.self, from: data) {
+                            DispatchQueue.main.async {
+                                self.cachedNearby = envelope.locations
+                                self.cacheTimestamp = Date()
+                                completion(envelope.locations, envelope.newly_unlocked_zone)
+                            }
+                        } else if let legacy = try? JSONDecoder().decode([NearbyLocationResponse].self, from: data) {
+                            DispatchQueue.main.async {
+                                self.cachedNearby = legacy
+                                self.cacheTimestamp = Date()
+                                completion(legacy, nil)
+                            }
+                        } else {
+                            print("❌ Decoding error: unrecognised nearby response shape")
+                            DispatchQueue.main.async { completion(self.cachedNearby, nil) }
+                        }
+                    } catch {
+                        print("❌ JSON decode error:", error)
+                        DispatchQueue.main.async { completion(self.cachedNearby, nil) }
                     }
-                } else if let legacy = try? JSONDecoder().decode([NearbyLocationResponse].self, from: data) {
+                    
+                case .failure(let error):
+                    print("❌ API error:", error.localizedDescription)
                     DispatchQueue.main.async {
-                        completion(legacy, nil)
+                        // Return cached data if available, even if stale
+                        completion(self.cachedNearby, nil)
                     }
-                } else {
-                    print("❌ Decoding error: unrecognised nearby response shape")
-                    DispatchQueue.main.async { completion([], nil) }
                 }
-
-            case .failure(let error):
-                print("❌ API error:", error.localizedDescription)
-                DispatchQueue.main.async { completion([], nil) }
             }
-        }
+        )
+    }
+    
+    func clearNearbyCache() {
+        cachedNearby = []
+        cacheTimestamp = nil
     }
     
     func checkIn(
-            locationId: Int,
-            userCoordinate: CLLocationCoordinate2D,
-            dryRun: Bool,
-            completion: @escaping @Sendable (Result<CheckInResponse, Error>) -> Void,
-        ) {
-
-
-            let params: [String: Any] = [
-                "location_id": locationId,
-                "latitude": userCoordinate.latitude,
-                "longitude": userCoordinate.longitude,
-                "dry_run": dryRun
-            ]
-
-            
-
-            ServiceModel.shared.postRequest(
-                endpoint: WebService.checkIn,
-                parameters: params
-            ) { result in
+        locationId: Int,
+        userCoordinate: CLLocationCoordinate2D,
+        dryRun: Bool,
+        completion: @escaping @Sendable (Result<CheckInResponse, Error>) -> Void
+    ) {
+        
+        let requestKey = "\(locationId)_\(dryRun)"
+        
+        // Prevent duplicate requests in flight
+        if inFlightCheckIns.contains(requestKey) {
+            print("⚠️ Duplicate checkIn request blocked: \(requestKey)")
+            return
+        }
+        
+        inFlightCheckIns.insert(requestKey)
+        
+        let params: [String: Any] = [
+            "location_id": locationId,
+            "latitude": userCoordinate.latitude,
+            "longitude": userCoordinate.longitude,
+            "dry_run": dryRun
+        ]
+        
+        ServiceModel.shared.postRequest(
+            endpoint: WebService.checkIn,
+            parameters: params,
+            completion: { [weak self] result in
+                defer {
+                    self?.inFlightCheckIns.remove(requestKey)
+                }
+                
                 switch result {
                 case .success(let data):
                     do {
@@ -243,27 +300,35 @@ final class LocationAPI {
                         
                         DispatchQueue.main.async {
                             if decoded.success {
-                                completion(.success(decoded))  // Only call if success == true
+                                completion(.success(decoded))
                             } else {
                                 print("❌ Check-in failed:", decoded.message)
-                                // Optionally, send a failure or ignore
-                                completion(.failure(NSError(domain: "", code: 1, userInfo: [NSLocalizedDescriptionKey: decoded.message])))
+                                let error = NSError(
+                                    domain: "CheckInError",
+                                    code: -1,
+                                    userInfo: [NSLocalizedDescriptionKey: decoded.message]
+                                )
+                                completion(.failure(error))
                             }
                         }
                         
                     } catch {
                         print("❌ Decode error:", error)
-                        DispatchQueue.main.async { completion(.failure(error)) }
+                        DispatchQueue.main.async {
+                            completion(.failure(error))
+                        }
                     }
-
+                    
                 case .failure(let error):
                     print("❌ API error:", error.localizedDescription)
-                    DispatchQueue.main.async { completion(.failure(error)) }
+                    DispatchQueue.main.async {
+                        completion(.failure(error))
+                    }
                 }
             }
-
-        }
+        )
     }
+}
 
 
 struct MapCenter: Equatable {
