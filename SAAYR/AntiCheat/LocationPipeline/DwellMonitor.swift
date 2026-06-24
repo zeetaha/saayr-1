@@ -86,6 +86,22 @@ final class DwellMonitor: ObservableObject {
             checkInStore.clear()
             state = .idle
         }
+
+        // Immediately evaluate current location (helps when the user's
+        // location is already inside the merchant zone at start).
+        if let current = currentLocationManager?.currentLocation {
+            // If we're already inside the enter radius, begin dwelling
+            // immediately instead of waiting for multiple consecutive fixes.
+            let merchantLoc = CLLocation(latitude: merchantCenter.latitude, longitude: merchantCenter.longitude)
+            let distance = current.distance(from: merchantLoc)
+            if distance <= enterRadius {
+                startDwelling()
+                return
+            }
+
+            // Otherwise, feed the current fix into the scanner logic.
+            updateUserLocation(current)
+        }
     }
 
     /// Cancels the dwell monitoring (user tapped cancel or left the zone).
@@ -162,7 +178,9 @@ final class DwellMonitor: ObservableObject {
 
     private func startDwelling() {
         dwellStartDate = Date()
-        state = .dwelling(startedAt: dwellStartDate!)
+        DispatchQueue.main.async {
+            self.state = .dwelling(startedAt: self.dwellStartDate!)
+        }
         consecutiveInside = 0
         dwellElapsed = 0
 
@@ -170,25 +188,34 @@ final class DwellMonitor: ObservableObject {
 
         // Start the progress timer
         dwellTimer?.invalidate()
-        dwellTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        // Create a timer and add it to the main run loop to ensure UI updates
+        // are delivered on the main thread.
+        dwellTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.tick()
+        }
+        if let timer = dwellTimer {
+            RunLoop.main.add(timer, forMode: .common)
         }
     }
 
     private func tick() {
-        dwellElapsed += 1
-        let rawProgress = Double(dwellElapsed) / Double(dwellSecondsMin)
-        progress = min(rawProgress, 1.0)
-        secondsRemaining = max(dwellSecondsMin - dwellElapsed, 0)
+        // Ensure published properties are updated on the main thread.
+        DispatchQueue.main.async {
+            self.dwellElapsed += 1
+            let rawProgress = Double(self.dwellElapsed) / Double(self.dwellSecondsMin)
+            self.progress = min(rawProgress, 1.0)
+            self.secondsRemaining = max(self.dwellSecondsMin - self.dwellElapsed, 0)
 
-        if dwellElapsed >= dwellSecondsMin {
-            guard case .dwelling = state else { return }
-            stopTimer()
-            state = .verifiedDwell
-            progress = 1.0
+            if self.dwellElapsed >= self.dwellSecondsMin {
+                guard case .dwelling = self.state else { return }
+                self.stopTimer()
+                self.state = .verifiedDwell
+                self.progress = 1.0
+            }
         }
 
-        // Also re-check location inside-zone during dwell
+        // Also re-check location inside-zone during dwell (location access off-main
+        // is safe here, cancellation will dispatch state changes appropriately).
         if let center = merchantCenter,
            let location = currentLocationManager?.currentLocation {
             let merchantLoc = CLLocation(latitude: center.latitude, longitude: center.longitude)

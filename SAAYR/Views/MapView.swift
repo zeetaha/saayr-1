@@ -420,15 +420,34 @@ struct MapView: View {
     }
 
     private func submitProofBundle(_ bundle: ProofBundle) {
-        AntiCheatAPI.verifyCheckIn(bundle: bundle) { result in
-            switch result {
-            case .success(let verification):
-                handleVerification(verification)
+        guard let location = selectedLocation else { return }
 
+        LocationAPI.shared.checkIn(
+            locationId: location.id,
+            userCoordinate: .init(latitude: location.latitude, longitude: location.longitude),
+            dryRun: false
+        ) { result in
+            switch result {
+            case .success:
+                successMessage = "Check-in successful!"
+                showSuccessAlert = true
+                showAlert = false
+                print("✅ Check-in submitted successfully")
+                let oldKingId = selectedLocation?.king_user_id
+                let locId = selectedLocation?.id
+                let locName = selectedLocation?.name ?? ""
+
+                showSuccessAlert = true
+                showAlert = false
+
+                // Check if the user was dethroned (old king was the current user, now someone else)
+                if oldKingId == UserModel.shared.user?.id, let lid = locId {
+                    checkDethroned(locationId: lid, locationName: locName)
+                }
+
+                cancelDwell()
             case .failure(let error):
-                // Queue offline and retry later
-                fraudStore.savePending(bundle: bundle)
-                errorMessage = "Check-in queued. Will retry when connected."
+                errorMessage = error.localizedDescription
                 showAlert = true
                 showSuccessAlert = false
                 cancelDwell()
