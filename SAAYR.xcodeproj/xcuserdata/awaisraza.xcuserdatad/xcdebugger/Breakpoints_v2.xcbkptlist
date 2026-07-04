@@ -55,54 +55,6 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "D2B1C1C2-7D91-4A05-BE4A-5057AF959038"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "SAAYR/Models/NearbyLocationResponse.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "242"
-            endingLineNumber = "242"
-            landmarkName = "fetchNearby(latitude:longitude:radiusKM:completion:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "9552C2C2-AF16-42BF-9C20-B3473DF763C8"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "SAAYR/Models/NearbyLocationResponse.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "245"
-            endingLineNumber = "245"
-            landmarkName = "fetchNearby(latitude:longitude:radiusKM:completion:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "4FC6F3DA-8CAF-4A63-A2F6-F60997D1DA24"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "SAAYR/Models/NearbyLocationResponse.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "235"
-            endingLineNumber = "235"
-            landmarkName = "fetchNearby(latitude:longitude:radiusKM:completion:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
             uuid = "6EDBF89F-3BC7-48F6-BA10-766A0C723535"
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
@@ -130,36 +82,6 @@
             endingLineNumber = "85"
             landmarkName = "beginMonitoring(merchantCenter:merchantRadiusMeters:locationManager:forceStart:)"
             landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "9B860005-E2C6-40E6-A068-2B5D59CF8292 - 9aaf66aee48e6fbb"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Saayr.DwellMonitor.beginMonitoring(merchantCenter: __C.CLLocationCoordinate2D, merchantRadiusMeters: Swift.Double, locationManager: Saayr.FilteredLocationManager, forceStart: Swift.Bool) -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/AntiCheat/LocationPipeline/DwellMonitor.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "85"
-                  endingLineNumber = "85">
-               </Location>
-               <Location
-                  uuid = "9B860005-E2C6-40E6-A068-2B5D59CF8292 - 9aaf66aee48e6fbb"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Saayr.DwellMonitor.beginMonitoring(merchantCenter: __C.CLLocationCoordinate2D, merchantRadiusMeters: Swift.Double, locationManager: Saayr.FilteredLocationManager, forceStart: Swift.Bool) -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/AntiCheat/LocationPipeline/DwellMonitor.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "85"
-                  endingLineNumber = "85">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -213,53 +135,55 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "95603C94-3E6E-4D1C-A084-17343D132DF7"
+            uuid = "2B4F4D25-A3E1-48AF-9BDA-F14564DFC6AE"
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "SAAYR/Views/MapView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "371"
-            endingLineNumber = "371"
-            landmarkName = "cancelDwell()"
+            startingLineNumber = "373"
+            endingLineNumber = "373"
+            landmarkName = "beginCheckIn(_:)"
             landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "95603C94-3E6E-4D1C-A084-17343D132DF7 - 4864f3b5f08be3c"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Saayr.MapView.beginCheckIn(Saayr.NearbyLocationResponse) -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/MapView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "371"
-                  endingLineNumber = "371">
-               </Location>
-               <Location
-                  uuid = "95603C94-3E6E-4D1C-A084-17343D132DF7 - 161b4c0ec77f5380"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #1 () -&gt; () in Saayr.MapView.cancelDwell() -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/MapView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "371"
-                  endingLineNumber = "371">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "2B3B214E-4538-4BC8-A3AE-4E72F37D41C0"
+            uuid = "3CC70A87-B8CF-4684-85A9-24C740ED95AB"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/MapView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "420"
+            endingLineNumber = "420"
+            landmarkName = "submitFinalCheckIn()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "346DA7D7-CDE4-4882-BD6E-1972F962BDA4"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/MapView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "430"
+            endingLineNumber = "430"
+            landmarkName = "submitFinalCheckIn()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "756CCDD9-4820-4087-9B77-8F844754E067"
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
@@ -268,114 +192,6 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "382"
             endingLineNumber = "382"
-            landmarkName = "submitFinalCheckIn()"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "BF8A188C-7DA9-47CD-8242-4FB4643F92D1"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "SAAYR/Views/MapView.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "390"
-            endingLineNumber = "390"
-            landmarkName = "submitFinalCheckIn()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "BF8A188C-7DA9-47CD-8242-4FB4643F92D1 - 8d14c15318fbf433"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #1 @Sendable (Swift.Result&lt;Saayr.CheckInResponse, Swift.Error&gt;) -&gt; () in Saayr.MapView.submitFinalCheckIn() -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/MapView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "391"
-                  endingLineNumber = "391">
-               </Location>
-               <Location
-                  uuid = "BF8A188C-7DA9-47CD-8242-4FB4643F92D1 - 8d14c15318fbf433"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #1 @Sendable (Swift.Result&lt;Saayr.CheckInResponse, Swift.Error&gt;) -&gt; () in Saayr.MapView.submitFinalCheckIn() -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/MapView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "391"
-                  endingLineNumber = "391">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "1FF416FA-2463-48D9-810A-869229BEC0E6"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "SAAYR/Views/MapView.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "350"
-            endingLineNumber = "350"
-            landmarkName = "beginCheckIn(_:)"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "1FF416FA-2463-48D9-810A-869229BEC0E6 - 25e6b1f469d154bc"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #1 @Sendable (Swift.Result&lt;Saayr.CheckInResponse, Swift.Error&gt;) -&gt; () in Saayr.MapView.beginCheckIn(Saayr.NearbyLocationResponse) -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/MapView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "351"
-                  endingLineNumber = "351">
-               </Location>
-               <Location
-                  uuid = "1FF416FA-2463-48D9-810A-869229BEC0E6 - 25e6b1f469d154bc"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #1 @Sendable (Swift.Result&lt;Saayr.CheckInResponse, Swift.Error&gt;) -&gt; () in Saayr.MapView.beginCheckIn(Saayr.NearbyLocationResponse) -&gt; ()"
-                  moduleName = "Saayr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/awaisraza/Documents/AppGearLab/iOS/SAAYR/SAAYR/Views/MapView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "351"
-                  endingLineNumber = "351">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "C93E5013-1E38-4CD8-A19E-94E04B877F9D"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "SAAYR/Views/MapView.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "343"
-            endingLineNumber = "343"
             landmarkName = "beginCheckIn(_:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -383,16 +199,48 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "42AAAEC7-59F1-4580-8446-68E6608DD871"
+            uuid = "BF4240B5-5693-4D94-8414-07D651DCF30F"
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "SAAYR/Views/MapView.swift"
+            filePath = "SAAYR/SAAYRApp.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "305"
-            endingLineNumber = "305"
-            landmarkName = "fetchNearby(_:)"
+            startingLineNumber = "30"
+            endingLineNumber = "30"
+            landmarkName = "messaging(_:didReceiveRegistrationToken:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "C285B243-F7C0-42BC-B4EC-6C8C048DE94D"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/ClaimedRewardsView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "119"
+            endingLineNumber = "119"
+            landmarkName = "fetchRedemptions()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "DB4F036C-33CE-4508-95D5-E66CB8C1F611"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "SAAYR/Views/ClaimedRewardsView.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "121"
+            endingLineNumber = "121"
+            landmarkName = "fetchRedemptions()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

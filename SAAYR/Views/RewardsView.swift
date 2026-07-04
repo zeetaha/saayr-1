@@ -179,7 +179,7 @@ struct RewardCard: View {
                         ProgressView().frame(width: 80, height: 80)
                     }
                 } else {
-                    Image(systemName: "gift.fill")
+                    Image(systemName: "nosign")
                         .font(.system(size: 32))
                         .foregroundColor(.gray)
                 }

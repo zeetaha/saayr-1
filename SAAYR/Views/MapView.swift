@@ -40,11 +40,11 @@ struct MapView: View {
     @State private var checkInProgress: Double = 0.0
     @State private var checkInRemainingSeconds: Int = 0
     @State private var checkInTimer: Timer? = nil
+    @State private var nearbyFetchWorkItem: DispatchWorkItem? = nil
+    @State private var lastNearbyFetchDate: Date? = nil
 
     /// Last location we auto-centered the camera on (avoid fighting manual pans).
     @State private var lastAutoCenter: CLLocationCoordinate2D?
-    /// Last location we fetched nearby merchants for.
-    @State private var lastFetchCoord: CLLocationCoordinate2D?
 
     private let fraudStore = FraudEvidenceStore()
     
@@ -149,7 +149,7 @@ struct MapView: View {
                 CheckInProgressCard(
                     merchant: .init(
                         id: location.id, name: location.name,
-                        category: location.category,
+                        category: location.category ?? "",
                         emoji: "📍",
                         xpReward: location.xp_reward,
                         coordinate: location.coordinate,
@@ -157,7 +157,7 @@ struct MapView: View {
                         imageUrl: WebService.resolvedImageUrl(location.image_url),
                         kingUserId: location.king_user_id,
                         kingFalconName: location.king_falcon_name,
-                        boundaryPolygon: location.boundary_polygon
+                        boundaryPolygon: location.boundary_polygon, type: location.type
                     ),
                     progress: checkInProgress,
                     remaining: checkInRemainingSeconds,
@@ -249,21 +249,8 @@ struct MapView: View {
                 lastAutoCenter = coord
             }
 
-            // Fetch nearby merchants only when moved > 5 km
-            if let lastFetch = lastFetchCoord {
-                let lastFetchLoc = CLLocation(latitude: lastFetch.latitude, longitude: lastFetch.longitude)
-                let newLoc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
-                if newLoc.distance(from: lastFetchLoc) > 5000 {
-                    fetchNearby(coord)
-                    lastFetchCoord = coord
-                }
-            } else {
-                fetchNearby(coord)
-                lastFetchCoord = coord
-            }
-
             weatherManager.update(coordinate: coord)
-
+            scheduleNearbyFetch(coord)
         }
     }
 
@@ -280,14 +267,17 @@ struct MapView: View {
     }
 
     private func handleMapDrag(_ newCenter: CLLocationCoordinate2D) {
-        guard let lastCenter = lastFetchCenter else { return }
+        guard let lastCenter = lastFetchCenter else {
+            scheduleNearbyFetch(newCenter)
+            return
+        }
 
         let old = CLLocation(latitude: lastCenter.latitude, longitude: lastCenter.longitude)
         let new = CLLocation(latitude: newCenter.latitude, longitude: newCenter.longitude)
         let distanceKM = old.distance(from: new) / 1000
 
         if distanceKM >= 5 {
-            fetchNearby(newCenter)
+            scheduleNearbyFetch(newCenter)
         }
     }
 
@@ -327,6 +317,46 @@ struct MapView: View {
         }
     }
 
+    private func scheduleNearbyFetch(_ coordinate: CLLocationCoordinate2D) {
+        guard shouldFetchNearby(for: coordinate) else { return }
+
+        nearbyFetchWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [coordinate] in
+            performNearbyFetch(coordinate)
+        }
+        nearbyFetchWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75, execute: workItem)
+    }
+
+    private func shouldFetchNearby(for coordinate: CLLocationCoordinate2D) -> Bool {
+        if isDwelling {
+            return false
+        }
+
+        if let lastCenter = lastFetchCenter {
+            let oldLocation = CLLocation(latitude: lastCenter.latitude, longitude: lastCenter.longitude)
+            let newLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            let distance = oldLocation.distance(from: newLocation)
+            if distance < 5_000 {
+                return false
+            }
+        }
+
+        if let lastDate = lastNearbyFetchDate,
+           Date().timeIntervalSince(lastDate) < 1.0 {
+            return false
+        }
+
+        return true
+    }
+
+    private func performNearbyFetch(_ coordinate: CLLocationCoordinate2D) {
+        guard shouldFetchNearby(for: coordinate) else { return }
+        lastNearbyFetchDate = Date()
+        lastFetchCenter = coordinate
+        fetchNearby(coordinate)
+    }
+
     // MARK: - Check-In Flow (Anti-Cheat)
 
     private func beginCheckIn(_ location: NearbyLocationResponse) {
@@ -340,23 +370,31 @@ struct MapView: View {
         isValidating = true
 
         // Step 1: Lightweight server pre-check (dryRun)
-        LocationAPI.shared.checkIn(
-            locationId: location.id,
-            userCoordinate: .init(latitude: location.latitude, longitude: location.longitude),
-            dryRun: true
-        ) { result in
-            isValidating = false
+        if let userLocation = locationManager.currentLocation {
+            LocationAPI.shared.checkIn(
+                locationId: location.id,
+                type: location.type,
+                userCoordinate: .init(latitude: userLocation.coordinate.latitude, longitude: userLocation.coordinate.longitude),
+                dryRun: true
+            ) { result in
+                isValidating = false
 
-            switch result {
-            case .success:
-                startCheckInTimer()
+                switch result {
+                case .success:
+                    startCheckInTimer()
 
-            case .failure(let error):
-                errorMessage = error.localizedDescription
-                showAlert = true
-                showSuccessAlert = false
-                selectedLocation = nil
+                case .failure(let error):
+                    errorMessage = error.localizedDescription
+                    showAlert = true
+                    showSuccessAlert = false
+                    selectedLocation = nil
+                }
             }
+        } else {
+            isValidating = false
+            errorMessage = "Unable to determine your location. Please try again."
+            showAlert = true
+            selectedLocation = nil
         }
     }
 
@@ -379,35 +417,43 @@ struct MapView: View {
         isSubmittingFinalCheckIn = true
         isValidating = true
 
-        LocationAPI.shared.checkIn(
-            locationId: location.id,
-            userCoordinate: .init(latitude: location.latitude, longitude: location.longitude),
-            dryRun: false
-        ) { result in
+        if let userLocation = locationManager.currentLocation {
+            LocationAPI.shared.checkIn(
+                locationId: location.id,
+                type: location.type,
+                userCoordinate: .init(latitude: userLocation.coordinate.latitude, longitude: userLocation.coordinate.longitude),
+                dryRun: false
+            ) { result in
+                isValidating = false
+                isSubmittingFinalCheckIn = false
+
+                switch result {
+                case .success:
+                    successMessage = "Check-in successful!"
+                    showSuccessAlert = true
+                    showAlert = false
+                    print("✅ Check-in submitted successfully")
+                    let oldKingId = selectedLocation?.king_user_id
+                    let locId = selectedLocation?.id
+                    let locName = selectedLocation?.name ?? ""
+
+                    if oldKingId == UserModel.shared.user?.id, let lid = locId {
+                        checkDethroned(locationId: lid, locationName: locName)
+                    }
+
+                    cancelDwell()
+                case .failure(let error):
+                    errorMessage = error.localizedDescription
+                    showAlert = true
+                    showSuccessAlert = false
+                    cancelDwell()
+                }
+            }
+        } else {
             isValidating = false
             isSubmittingFinalCheckIn = false
-
-            switch result {
-            case .success:
-                successMessage = "Check-in successful!"
-                showSuccessAlert = true
-                showAlert = false
-                print("✅ Check-in submitted successfully")
-                let oldKingId = selectedLocation?.king_user_id
-                let locId = selectedLocation?.id
-                let locName = selectedLocation?.name ?? ""
-
-                if oldKingId == UserModel.shared.user?.id, let lid = locId {
-                    checkDethroned(locationId: lid, locationName: locName)
-                }
-
-                cancelDwell()
-            case .failure(let error):
-                errorMessage = error.localizedDescription
-                showAlert = true
-                showSuccessAlert = false
-                cancelDwell()
-            }
+            errorMessage = "Unable to determine your location. Please try again."
+            showAlert = true
         }
     }
 
@@ -574,7 +620,10 @@ struct MerchantMarkerView: View {
     @State private var pulse = false
     
     var markerColor: Color {
-        isPartner ? .purple : .green
+        if merchant.type ?? "".lowercased() == "hidden_gems" {
+            return .yellow
+        }
+        return isPartner ? .purple : .green
     }
     
     var body: some View {
@@ -815,6 +864,7 @@ struct MerchantLocation: Identifiable {
 
     // Polygon boundary (for rendering)
     let boundaryPolygon: [PolygonPoint]?
+    let type: String?
 }
 
 extension NearbyLocationResponse {
@@ -822,7 +872,7 @@ extension NearbyLocationResponse {
         MerchantLocation(
             id: id,
             name: name,
-            category: category,
+            category: category ?? "",
             emoji: "📍",
             xpReward: xp_reward,
             coordinate: coordinate,
@@ -830,7 +880,8 @@ extension NearbyLocationResponse {
             imageUrl: WebService.resolvedImageUrl(image_url),
             kingUserId: king_user_id,
             kingFalconName: king_falcon_name,
-            boundaryPolygon: boundary_polygon
+            boundaryPolygon: boundary_polygon,
+            type:type
         )
     }
 }

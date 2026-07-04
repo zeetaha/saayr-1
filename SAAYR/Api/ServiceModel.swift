@@ -229,6 +229,47 @@ class ServiceModel {
         }
     }
     
+    // MARK: - Fetch My Redemptions
+    func fetchMyRedemptions(page: Int, pageSize: Int, completion: @escaping (Result<MyRedemptionsResponse, Error>) -> Void) {
+        let parameters: [String: Any] = [
+            "page": page,
+            "page_size": pageSize
+        ]
+        
+        getRequest(endpoint: WebService.myRedemptions, parameters: parameters) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(MyRedemptionsResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // MARK: - Fetch Redemption Detail
+    func fetchRedemptionDetail(id: Int, completion: @escaping (Result<Redemption, Error>) -> Void) {
+        let endpoint = WebService.myRedemptions + "/\(id)"
+        
+        getRequest(endpoint: endpoint) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let redemption = try JSONDecoder().decode(Redemption.self, from: data)
+                    completion(.success(redemption))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
     // MARK: - Redeem Reward
     func redeemReward(rewardId: Int, completion: @escaping (Result<RedeemResponse, Error>) -> Void) {
         let parameters: [String: Any] = [
@@ -434,5 +475,18 @@ class ServiceModel {
             
 
         return headers
+    }
+    
+    // MARK: - Update FCM Token
+    func updateFcmToken(_ token: String, completion: @escaping (Result<Data, AFError>) -> Void) {
+        let parameters: [String: Any] = [
+            "token": token
+        ]
+
+        patchRequest(
+            endpoint: WebService.updateFcmToken,
+            parameters: parameters,
+            completion: completion
+        )
     }
 }

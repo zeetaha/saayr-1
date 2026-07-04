@@ -26,7 +26,7 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
     let xp_reward: Int
     let cooldown_hours: Int
 
-    let category: String
+    let category: String?
     let image_url: String?
 
     let can_checkin: Bool
@@ -47,6 +47,8 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
     let king_user_id: Int?
     let king_falcon_name: String?
     let king_full_name: String?
+    
+    let type: String?
 
     /// Polygon boundary (nil = circular geofence only)
     let boundary_polygon: [PolygonPoint]?
@@ -102,6 +104,7 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
         case king_full_name
 
         case boundary_polygon
+        case type
     }
 }
 
@@ -263,6 +266,7 @@ final class LocationAPI {
     
     func checkIn(
         locationId: Int,
+        type:String?,
         userCoordinate: CLLocationCoordinate2D,
         dryRun: Bool,
         completion: @escaping @Sendable (Result<CheckInResponse, Error>) -> Void
@@ -280,6 +284,7 @@ final class LocationAPI {
         
         let params: [String: Any] = [
             "location_id": locationId,
+            "type": type ?? "",
             "latitude": userCoordinate.latitude,
             "longitude": userCoordinate.longitude,
             "dry_run": dryRun

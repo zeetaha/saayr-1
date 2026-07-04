@@ -57,6 +57,7 @@ class WebService {
     static var leaderboard   = baseUrl + "user/leaderboard"
     static var updateProfile = baseUrl + "user/profile"
     static var deleteAccount = baseUrl + "user/account"
+    static var updateFcmToken = baseUrl + "user/fcm-token"
 
     // MARK: - Support Tickets
     static var supportUnreadCount = baseUrl + "tickets/my-tickets/unread-count"
@@ -75,6 +76,7 @@ class WebService {
     // MARK: - Rewards
     static var rewardsCatalog = baseUrl + "rewards/catalog"
     static var redeemReward   = baseUrl + "rewards/redeem"
+    static var myRedemptions  = baseUrl + "rewards/my-redemptions"
     static var weeklyTop3     = baseUrl + "user/weekly-top3"
 
     // MARK: - Anti-Cheat
