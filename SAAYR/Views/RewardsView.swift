@@ -3,109 +3,94 @@ import SwiftUI
 struct RewardsView: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
-    
+
     @State private var rewards: [APIReward] = []
-    @State private var showRedeemDialog = false
     @State private var selectedReward: APIReward?
-    @State private var isLoading = false
+    @State private var isLoadingRewards = false
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var redemptionData: RedemptionData?
     @State private var showSuccess = false
-    
+
     var body: some View {
         ZStack {
-            // Background gradient
             LinearGradient(
                 colors: [Color(hex: "#F0F9FF"), Color.white, Color(hex: "#FFF7ED")],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-            
+
             ScrollView {
                 VStack(spacing: 24) {
-                    
-                    // Header
-                    VStack(alignment: .leading, spacing: 12) {
+
+                    // MARK: - Header row: title + XP pill
+                    HStack(alignment: .center) {
                         Text(languageManager.text("rewards.title"))
-                            .font(.system(size: 36, weight: .bold))
+                            .font(.system(size: 32, weight: .bold))
                             .foregroundColor(Color(hex: "#FF8C00"))
-                        
-                        // XP Balance Card
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 24)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color(hex: "#FFA500"), Color(hex: "#FF8C00")]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(height: 140)
-                            
-                            HStack {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(languageManager.text("rewards.yourXP"))
-                                        .foregroundColor(.white.opacity(0.9))
-                                        .font(.system(size: 16))
-                                    
-                                    Text("\(userManager.userData.totalXP)")
-                                        .font(.system(size: 48, weight: .bold))
-                                        .foregroundColor(.white)
-                                }
-                                Spacer()
-                                Text("💎")
-                                    .font(.system(size: 64))
-                            }
-                            .padding(.horizontal, 24)
+
+                        Spacer()
+
+                        // Compact XP pill
+                        HStack(spacing: 5) {
+                            Text("💎")
+                                .font(.system(size: 14))
+                            Text("\(userManager.userData.totalXP) XP")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white)
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [Color(hex: "#FFA500"), Color(hex: "#FF6B00")],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ))
+                        )
                     }
                     .padding(.horizontal)
                     .padding(.top, 24)
-                    
+
+                    // MARK: - Available Rewards
                     HStack(alignment: .center, spacing: 8) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(hex: "#FF8C00"))
                             .frame(width: 4, height: 24)
-
-                        Text(languageManager.text("Available Rewards"))
+                        Text("Available Rewards")
                             .foregroundColor(.black.opacity(0.8))
                             .font(.system(size: 20, weight: .bold))
-
                         Spacer()
                     }
                     .padding(.horizontal, 16)
-                    
-                    // Loading or Rewards List
-                    if isLoading {
-                        ProgressView()
-                            .frame(height: 100)
+
+                    if isLoadingRewards {
+                        ProgressView().frame(height: 100)
                     } else {
                         VStack(spacing: 16) {
                             ForEach(rewards) { reward in
                                 RewardCard(reward: reward, userXP: userManager.userData.totalXP) { selected in
                                     selectedReward = selected
-                                    showRedeemDialog = true
                                 }
                             }
                         }
                         .padding(.horizontal)
                     }
+
+                    Spacer(minLength: 40)
                 }
             }
         }
+        // Redeem confirmation
         .alert(
             "Redeem Reward",
             isPresented: .constant(selectedReward != nil),
             presenting: selectedReward
         ) { reward in
-            Button("Redeem") {
-                redeemReward(rewardId: reward.id)
-            }
-            Button("Cancel", role: .cancel) {
-                selectedReward = nil
-            }
+            Button("Redeem") { redeemReward(rewardId: reward.id) }
+            Button("Cancel", role: .cancel) { selectedReward = nil }
         } message: { reward in
             Text("Are you sure you want to redeem \(reward.title) for \(reward.xp_cost) XP?")
         }
@@ -126,51 +111,41 @@ struct RewardsView: View {
                 }
             )
         }
-        .onAppear() {
+        .onAppear {
             userManager.fetchAllUserData()
             fetchRewards()
         }
     }
-    
+
+    // MARK: - API
+
     private func fetchRewards() {
-        isLoading = true
+        isLoadingRewards = true
         ServiceModel.shared.fetchRewards(page: 1, pageSize: 20) { result in
             DispatchQueue.main.async {
-                isLoading = false
-                switch result {
-                case .success(let fetchedRewards):
-                    self.rewards = fetchedRewards
-                case .failure(let error):
-                    self.errorMessage = "Failed to load rewards: \(error.localizedDescription)"
-                    self.showError = true
-                }
+                isLoadingRewards = false
+                if case .success(let fetched) = result { rewards = fetched }
             }
         }
     }
-    
+
     private func redeemReward(rewardId: Int) {
         ServiceModel.shared.redeemReward(rewardId: rewardId) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
-                    // Show redemption code to user
-                    self.redemptionData = response.data
-                    self.showSuccess = true
-                    // Refresh user data and rewards in background
+                    redemptionData = response.data
+                    showSuccess = true
                     userManager.fetchAllUserData()
                     fetchRewards()
                     selectedReward = nil
-                case .failure(let error):
+                case .failure:
                     if let reward = selectedReward {
-                        let userXP = userManager.userData.totalXP
-                        let neededXP = reward.xp_cost
-                        
-                        self.errorMessage = "Not enough XP. You have \(userXP) XP, need \(neededXP)."
+                        errorMessage = "Not enough XP. You have \(userManager.userData.totalXP) XP, need \(reward.xp_cost)."
                     } else {
-                        self.errorMessage = error.localizedDescription
+                        errorMessage = "Redemption failed. Please try again."
                     }
-                    
-                    self.showError = true
+                    showError = true
                     selectedReward = nil
                 }
             }
@@ -178,7 +153,8 @@ struct RewardsView: View {
     }
 }
 
-// MARK: Reward Card
+// MARK: - Reward Card
+
 struct RewardCard: View {
     var reward: APIReward
     var userXP: Int
@@ -186,31 +162,24 @@ struct RewardCard: View {
 
     @EnvironmentObject var languageManager: LanguageManager
 
-    var canAfford: Bool {
-        userXP >= reward.xp_cost
-    }
+    var canAfford: Bool { userXP >= reward.xp_cost }
 
     var body: some View {
         HStack(spacing: 16) {
-            // image
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.gray.opacity(0.1))
                     .frame(width: 80, height: 80)
-
                 if let imageUrl = reward.image_url, let url = URL(string: imageUrl) {
                     AsyncImage(url: url) { img in
-                        img
-                            .resizable()
-                            .scaledToFill()
+                        img.resizable().scaledToFill()
                             .frame(width: 80, height: 80)
                             .cornerRadius(12)
                     } placeholder: {
-                        ProgressView()
-                            .frame(width: 80, height: 80)
+                        ProgressView().frame(width: 80, height: 80)
                     }
                 } else {
-                    Image(systemName: "gift.fill")
+                    Image(systemName: "nosign")
                         .font(.system(size: 32))
                         .foregroundColor(.gray)
                 }
@@ -220,15 +189,12 @@ struct RewardCard: View {
                 Text(reward.title)
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.black)
-
                 if let merchant = reward.merchant_name, !merchant.isEmpty {
                     Text(merchant)
                         .font(.system(size: 14))
                         .foregroundColor(.gray)
                 }
-
                 Spacer()
-
                 HStack(spacing: 4) {
                     Image(systemName: "star.fill")
                         .foregroundColor(.yellow)
@@ -241,30 +207,22 @@ struct RewardCard: View {
 
             Spacer()
 
-            Button(action: {
-                onRedeem(reward)
-            }) {
+            Button { onRedeem(reward) } label: {
                 HStack(spacing: 4) {
                     if !canAfford {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 10, weight: .semibold))
+                        Image(systemName: "lock.fill").font(.system(size: 10, weight: .semibold))
                     }
                     Text(canAfford ? "Redeem" : "Locked")
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .lineLimit(1).minimumScaleFactor(0.8)
                 }
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.vertical, 6)
                 .padding(.horizontal, 12)
                 .background(
-                    ZStack {
-                        if canAfford {
-                            LinearGradient(colors: [.green, .teal], startPoint: .leading, endPoint: .trailing)
-                        } else {
-                            Color.gray
-                        }
-                    }
+                    canAfford
+                        ? AnyView(LinearGradient(colors: [.green, .teal], startPoint: .leading, endPoint: .trailing))
+                        : AnyView(Color.gray)
                 )
                 .cornerRadius(12)
             }
@@ -277,7 +235,35 @@ struct RewardCard: View {
     }
 }
 
-// MARK: API Response Model
+// MARK: - API Models
+
+struct WeeklyTop3Response: Decodable {
+    let pool_id: Int?
+    let pool_name: String?
+    let period_start: String?
+    let period_end: String?
+    let top3: [WeeklyTop3Entry]
+    let my_rank: Int?
+    let my_points: Int?
+}
+
+struct WeeklyTop3Entry: Decodable {
+    let rank: Int
+    let user_id: Int
+    let falcon_name: String?
+    let full_name: String?
+    let level: Int
+    let points: Int
+    let avatar: String?
+    let prize_name: String?
+    let prize_type: String?
+    let prize_image_url: String?
+
+    var displayName: String {
+        full_name?.isEmpty == false ? full_name! : (falcon_name ?? "Unknown")
+    }
+}
+
 struct RewardsCatalogResponse: Codable {
     let rewards: [APIReward]
     let total: Int
@@ -286,7 +272,6 @@ struct RewardsCatalogResponse: Codable {
     let total_pages: Int
 }
 
-// MARK: API Reward Model
 struct APIReward: Identifiable, Codable {
     let id: Int
     let title: String
@@ -310,25 +295,17 @@ struct APIReward: Identifiable, Codable {
     let updated_at: String
 }
 
-// MARK: Redeem Response Model
 struct RedeemResponse: Codable {
     let success: Bool
     let message: String
     let data: RedemptionData
 }
 
-// MARK: Redemption Data Model
 struct RedemptionData: Codable {
     let redemption_id: Int
     let code: String
     let instructions: String
 }
-
-// MARK: Dummy Data
-func getDemoRewards() -> [APIReward] {
-    return []
-}
-
 
 #Preview {
     RewardsView()

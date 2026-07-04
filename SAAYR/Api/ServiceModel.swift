@@ -18,6 +18,14 @@ class ServiceModel {
     // Singleton instance for easy access throughout the app
     static let shared = ServiceModel()
 
+    /// Custom Alamofire Session with the token interceptor.
+    /// All requests go through this session to get automatic token refresh + injection.
+    private lazy var session: Session = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        return Session(configuration: config, interceptor: TokenInterceptor())
+    }()
+
     private init() { }
 
     /// Posts `userAccountBlocked` if the response is a 403 with the blocked-account detail.
@@ -35,7 +43,7 @@ class ServiceModel {
 
     // MARK: - GET Request
     func getRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
-        AF.request(endpoint, method: .get, parameters: parameters, encoding: URLEncoding.default, headers: getHeader())
+        session.request(endpoint, method: .get, parameters: parameters, encoding: URLEncoding.default, headers: getHeader())
             .validate()
             .responseData { [weak self] response in
                 self?.checkForBlockedAccount(response: response)
@@ -50,7 +58,7 @@ class ServiceModel {
 
     // MARK: - POST Request
     func postRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
-        AF.request(endpoint, method: .post, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
+        session.request(endpoint, method: .post, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
             .validate()
             .responseData { [weak self] response in
                 self?.checkForBlockedAccount(response: response)
@@ -65,7 +73,7 @@ class ServiceModel {
     
     // MARK: - DELETE Request
     func deleteRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
-        AF.request(endpoint, method: .delete, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
+        session.request(endpoint, method: .delete, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
             .validate()
             .responseData { response in
                 switch response.result {
@@ -79,7 +87,7 @@ class ServiceModel {
     
     // MARK: - PATCH Request
     func patchRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
-        AF.request(endpoint, method: .patch, parameters: parameters, encoding: JSONEncoding.default)
+        session.request(endpoint, method: .patch, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
             .validate()
             .responseData { response in
                 switch response.result {
@@ -93,7 +101,7 @@ class ServiceModel {
     
     // MARK: - PUT Request
        func putRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
-           AF.request(endpoint, method: .put, parameters: parameters, encoding: JSONEncoding.default,headers: getHeader())
+           session.request(endpoint, method: .put, parameters: parameters, encoding: JSONEncoding.default,headers: getHeader())
                .validate()
                .responseData { response in
                    switch response.result {
@@ -107,7 +115,7 @@ class ServiceModel {
 
     // MARK: - Multipart Form Data POST Request (for file uploads)
     func multipartPostRequest(endpoint: String, parameters: [String: Any]? = nil, images: [UIImage]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
-        AF.upload(multipartFormData: { multipartFormData in
+        session.upload(multipartFormData: { multipartFormData in
             // Add text parameters
             if let params = parameters {
                 for (key, value) in params {
@@ -150,7 +158,7 @@ class ServiceModel {
             return
         }
 
-        AF.upload(multipartFormData: { multipartFormData in
+        session.upload(multipartFormData: { multipartFormData in
             multipartFormData.append(jpegData, withName: "file", fileName: "image.jpg", mimeType: "image/jpeg")
         }, to: endpoint, headers: getHeader(forMultipart: true))
         .validate()
@@ -221,13 +229,54 @@ class ServiceModel {
         }
     }
     
+    // MARK: - Fetch My Redemptions
+    func fetchMyRedemptions(page: Int, pageSize: Int, completion: @escaping (Result<MyRedemptionsResponse, Error>) -> Void) {
+        let parameters: [String: Any] = [
+            "page": page,
+            "page_size": pageSize
+        ]
+        
+        getRequest(endpoint: WebService.myRedemptions, parameters: parameters) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(MyRedemptionsResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // MARK: - Fetch Redemption Detail
+    func fetchRedemptionDetail(id: Int, completion: @escaping (Result<Redemption, Error>) -> Void) {
+        let endpoint = WebService.myRedemptions + "/\(id)"
+        
+        getRequest(endpoint: endpoint) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let redemption = try JSONDecoder().decode(Redemption.self, from: data)
+                    completion(.success(redemption))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
     // MARK: - Redeem Reward
     func redeemReward(rewardId: Int, completion: @escaping (Result<RedeemResponse, Error>) -> Void) {
         let parameters: [String: Any] = [
             "reward_id": rewardId
         ]
         
-        AF.request(
+        session.request(
             WebService.redeemReward,
             method: .post,
             parameters: parameters,
@@ -338,7 +387,41 @@ class ServiceModel {
         }
     }
 
+    // MARK: - Zones (Fog of War)
+
+    func fetchZones(completion: @escaping (Result<[Zone], Error>) -> Void) {
+        getRequest(endpoint: WebService.zones) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let zones = try JSONDecoder().decode([Zone].self, from: data)
+                    completion(.success(zones))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     // MARK: - Fetch Challenges
+    func fetchWeeklyTop3(completion: @escaping (Result<WeeklyTop3Response, Error>) -> Void) {
+        getRequest(endpoint: WebService.weeklyTop3) { result in
+            switch result {
+            case .success(let data):
+                do {
+                    let response = try JSONDecoder().decode(WeeklyTop3Response.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(error))
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
     func fetchChallenges(completion: @escaping (Result<ChallengesResponse, Error>) -> Void) {
         getRequest(endpoint: WebService.challenges) { result in
             switch result {
@@ -377,12 +460,14 @@ class ServiceModel {
         }
             
             // Add Authorization if needed
-        if let token = UserModel.shared.user?.accessToken {
-            print(token)
-                headers["Authorization"] = "Bearer \(token)"
+        // Prefer Keychain‑stored token (refreshed, always current)
+        if let token = TokenManager.shared.accessToken ?? UserModel.shared.user?.accessToken {
+            headers["Authorization"] = "Bearer \(token)"
+            print("Bearer \(token)")
         }
         headers["Language-Code"] = UserModel.shared.languageCode
-        headers["App-Version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        headers["App-Version"]   = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        headers["X-App-Version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         headers["Latitude"] = UserModel.shared.latitude
         headers["Longitude"] = UserModel.shared.longitude
         headers["Country-Code"] = UserModel.shared.countryCode
@@ -390,5 +475,18 @@ class ServiceModel {
             
 
         return headers
+    }
+    
+    // MARK: - Update FCM Token
+    func updateFcmToken(_ token: String, completion: @escaping (Result<Data, AFError>) -> Void) {
+        let parameters: [String: Any] = [
+            "token": token
+        ]
+
+        patchRequest(
+            endpoint: WebService.updateFcmToken,
+            parameters: parameters,
+            completion: completion
+        )
     }
 }

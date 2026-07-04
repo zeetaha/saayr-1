@@ -120,6 +120,13 @@ class UserModel {
         }
     }
     
+    /// Returns the most current access token:
+    /// prefers the Keychain‑stored token (refreshed by TokenManager),
+    /// falls back to the UserDefaults token (legacy / first launch).
+    var currentAccessToken: String? {
+        TokenManager.shared.accessToken ?? user?.accessToken
+    }
+
     // Private init prevents direct instantiation
     private init() {}
     

@@ -18,21 +18,24 @@ struct ProfileView: View {
     @State private var showDeleteConfirm = false
     @State private var showLogoutConfirm = false
     @State private var supportUnreadCount: Int = 0
+    @State private var showClaimedRewards = false
 
     
     var body: some View {
-        ZStack {
-            // MARK: Background Gradient
-            LinearGradient(
-                colors: [
-                    Color(hex: "#F5F3FF"),
-                    Color(hex: "#FAF5FF"),
-                    Color(hex: "#FDF2F8")
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+
+                // MARK: Background Gradient
+                LinearGradient(
+                    colors: [
+                        Color(hex: "#F5F3FF"),
+                        Color(hex: "#FAF5FF"),
+                        Color(hex: "#FDF2F8")
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
             
             // MARK: Animated Orbs
             AnimatedOrb(
@@ -88,7 +91,13 @@ struct ProfileView: View {
                             HStack(spacing: 12) {
                                 StatCardProfile(icon: "mappin", value: "\(userManager.userData.checkInStreak)", label: "Completed check-ins")
                                 StatCardProfile(icon: "bolt.fill", value: "\(userManager.userData.pvpWins)", label: "PVP wins")
-                                StatCardProfile(icon: "gift.fill", value: "\(userManager.userData.rewards ?? 0)", label: "Rewards claimed")
+                                
+                                Button {
+                                    showClaimedRewards = true
+                                } label: {
+                                    StatCardProfile(icon: "gift.fill", value: "\(userManager.userData.rewards ?? 0)", label: "Rewards claimed")
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding()
@@ -176,6 +185,7 @@ struct ProfileView: View {
                 .padding(.top, 24)
             }
         }
+        }
         .onAppear {
             fullName = userManager.userData.fullName ?? ""
             email = userManager.userData.email ?? ""
@@ -189,6 +199,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSetting) {
             SettingsView()
+        }
+        .fullScreenCover(isPresented: $showClaimedRewards) {
+            ClaimedRewardsView()
         }
         .alert("Logout?", isPresented: $showLogoutConfirm) {
             Button("Logout", role: .destructive) { authManager.logout() }

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0D695DDA2FF9B52200C68FAB /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 0D695DD92FF9B52200C68FAB /* FirebaseMessaging */; };
+		0D695DDC2FF9B6FD00C68FAB /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0D695DDB2FF9B6FD00C68FAB /* GoogleService-Info.plist */; };
+		0D7272D12FE871E100DFBA5A /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 0D7272D02FE871E100DFBA5A /* MapboxMaps */; };
 		0D744B182F12815500116FD4 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 0D744B172F12815500116FD4 /* Alamofire */; };
 		0D744B1D2F12816700116FD4 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 0D744B1C2F12816700116FD4 /* Kingfisher */; };
 		0D8D00902F7D67BE003AADDB /* MoyasarSdk in Frameworks */ = {isa = PBXBuildFile; productRef = 0D8D008F2F7D67BE003AADDB /* MoyasarSdk */; };
@@ -14,6 +17,7 @@
 
 /* Begin PBXFileReference section */
 		0D0CECEA2EF4A47C00FB6A6F /* Saayr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saayr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D695DDB2FF9B6FD00C68FAB /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -44,6 +48,8 @@
 			files = (
 				0D744B1D2F12816700116FD4 /* Kingfisher in Frameworks */,
 				0D8D00902F7D67BE003AADDB /* MoyasarSdk in Frameworks */,
+				0D695DDA2FF9B52200C68FAB /* FirebaseMessaging in Frameworks */,
+				0D7272D12FE871E100DFBA5A /* MapboxMaps in Frameworks */,
 				0D744B182F12815500116FD4 /* Alamofire in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -56,6 +62,7 @@
 			children = (
 				0D0CECEC2EF4A47C00FB6A6F /* SAAYR */,
 				0D0CECEB2EF4A47C00FB6A6F /* Products */,
+				0D695DDB2FF9B6FD00C68FAB /* GoogleService-Info.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -90,6 +97,8 @@
 				0D744B172F12815500116FD4 /* Alamofire */,
 				0D744B1C2F12816700116FD4 /* Kingfisher */,
 				0D8D008F2F7D67BE003AADDB /* MoyasarSdk */,
+				0D7272D02FE871E100DFBA5A /* MapboxMaps */,
+				0D695DD92FF9B52200C68FAB /* FirebaseMessaging */,
 			);
 			productName = SAAYR;
 			productReference = 0D0CECEA2EF4A47C00FB6A6F /* Saayr.app */;
@@ -123,6 +132,8 @@
 				0D744B162F12815500116FD4 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				0D744B1B2F12816700116FD4 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				0D8D008E2F7D67BE003AADDB /* XCRemoteSwiftPackageReference "moyasar-ios-sdk" */,
+				0D7272CF2FE871E100DFBA5A /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */,
+				0D695DD82FF9B52200C68FAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0D0CECEB2EF4A47C00FB6A6F /* Products */;
@@ -139,6 +150,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0D695DDC2FF9B6FD00C68FAB /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -292,9 +304,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SAAYR/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "SAAYR Staging";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Your location is used to show nearby merchants.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show nearby merchants and allow check-ins.";
@@ -338,9 +350,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SAAYR/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "SAAYR Staging";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Your location is used to show nearby merchants.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show nearby merchants and allow check-ins.";
@@ -440,11 +452,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = X4KTHW6XMR;
 				ENABLE_PREVIEWS = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SAAYR/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "SAAYR Staging";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from sensors to track activity challenges fairly. Manual entries are excluded.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SAAYR reads your step count from HealthKit to validate activity-based challenges and ensure fair battle completion.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "SAAYR does not write health data. This string is required by Apple when the HealthKit entitlement is present.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Your location is used to show nearby merchants.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to show nearby merchants and allow check-ins.";
@@ -501,6 +514,22 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		0D695DD82FF9B52200C68FAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 12.15.0;
+			};
+		};
+		0D7272CF2FE871E100DFBA5A /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 11.25.0;
+			};
+		};
 		0D744B162F12815500116FD4 /* XCRemoteSwiftPackageReference "Alamofire" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Alamofire/Alamofire.git";
@@ -528,6 +557,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		0D695DD92FF9B52200C68FAB /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D695DD82FF9B52200C68FAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		0D7272D02FE871E100DFBA5A /* MapboxMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D7272CF2FE871E100DFBA5A /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */;
+			productName = MapboxMaps;
+		};
 		0D744B172F12815500116FD4 /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 0D744B162F12815500116FD4 /* XCRemoteSwiftPackageReference "Alamofire" */;

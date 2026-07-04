@@ -28,6 +28,8 @@ struct UserData: Codable {
     var text_of_progress : String
     var current_percentage : Double?
     var gif_url: String?
+    var greeting_en: String?
+    var greeting_ar: String?
 
     var petStage: PetStage {
         LevelSystem.getPetStage(pet_stage)
@@ -173,7 +175,9 @@ extension UserData {
             groups: [],
             pvp_enabled: dashboard.pvp_enabled,
             pvp_message: dashboard.pvp_message, level : dashboard.pet_stage, userLevel: dashboard.user_level, points: dashboard.total_xp, pet_stage: dashboard.pet_stage, text_of_progress: dashboard.text_of_progress ?? "",current_percentage: dashboard.current_percentage ?? 0.0,
-            gif_url: dashboard.gif_url
+            gif_url: dashboard.gif_url,
+            greeting_en: dashboard.greeting_en,
+            greeting_ar: dashboard.greeting_ar
         )
     }
 }

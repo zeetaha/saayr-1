@@ -10,6 +10,7 @@ struct LeaderboardFullView: View {
     @State private var allLeaderboardUsers: [LeaderboardUser] = []
     @State private var totalPages = 1
     @State private var myRank: MyRank? = nil
+    @State private var weeklyTop3: WeeklyTop3Response? = nil
     
     let itemsPerPage = 20
     
@@ -75,7 +76,14 @@ struct LeaderboardFullView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         ForEach(allLeaderboardUsers) { user in
-                            LeaderboardCard(user: .constant(user), rank: user.rank)
+                            if user.rank <= 3 {
+                                Top3LeaderboardCard(
+                                    user: user,
+                                    prizeName: prizeForRank(user.rank)
+                                )
+                            } else {
+                                LeaderboardCard(user: .constant(user), rank: user.rank)
+                            }
                         }
                         
                         // Load More Button
@@ -114,6 +122,7 @@ struct LeaderboardFullView: View {
         .navigationBarHidden(true)
         .onAppear {
             fetchLeaderboardPage(page: 1)
+            fetchWeeklyTop3()
         }
     }
     
@@ -176,6 +185,19 @@ struct LeaderboardFullView: View {
     
     private func loadNextPage() {
         fetchLeaderboardPage(page: currentPage + 1)
+    }
+
+    private func fetchWeeklyTop3() {
+        ServiceModel.shared.fetchWeeklyTop3 { result in
+            DispatchQueue.main.async {
+                if case .success(let response) = result { weeklyTop3 = response }
+            }
+        }
+    }
+
+    private func prizeForRank(_ rank: Int) -> String? {
+        guard rank <= 3 else { return nil }
+        return weeklyTop3?.top3.first(where: { $0.rank == rank })?.prize_name
     }
 
     // MARK: - Your Position Card
@@ -248,6 +270,106 @@ struct LeaderboardFullView: View {
                 )
         )
         .shadow(color: Color(hex: "#6366F1").opacity(0.4), radius: 8, x: 0, y: 4)
+    }
+}
+
+// MARK: - Top 3 Leaderboard Card
+
+struct Top3LeaderboardCard: View {
+    let user: LeaderboardUser
+    let prizeName: String?
+
+    private var rankColor: Color {
+        switch user.rank {
+        case 1: return Color(hex: "#F59E0B")
+        case 2: return Color(hex: "#9CA3AF")
+        case 3: return Color(hex: "#D97706")
+        default: return Color(hex: "#6366F1")
+        }
+    }
+
+    private var medal: String {
+        switch user.rank {
+        case 1: return "🥇"
+        case 2: return "🥈"
+        case 3: return "🥉"
+        default: return "#\(user.rank)"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            // Large medal
+            Text(medal)
+                .font(.system(size: 28))
+                .frame(width: 36)
+
+            // Avatar — image if available, otherwise initial with rank tint
+            ZStack {
+                Circle()
+                    .fill(rankColor.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                if let urlStr = user.avatar, !urlStr.isEmpty, let url = URL(string: urlStr) {
+                    AsyncImage(url: url) { img in
+                        img.resizable().scaledToFill()
+                    } placeholder: {
+                        Text(String(user.name.prefix(1)).uppercased())
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(rankColor)
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                } else {
+                    Text(String(user.name.prefix(1)).uppercased())
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(rankColor)
+                }
+            }
+
+            // Name + level
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                Text("Level \(user.level)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+            }
+
+            Spacer()
+
+            // Points + prize pill
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("\(user.points) pts")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(rankColor)
+                if let prize = prizeName {
+                    Text("🎁 \(prize)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(rankColor))
+                        .lineLimit(1)
+                } else {
+                    Text("Prize TBA")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(rankColor.opacity(0.35), lineWidth: 1.5)
+                )
+        )
+        .shadow(color: rankColor.opacity(0.18), radius: 6, x: 0, y: 3)
     }
 }
 
