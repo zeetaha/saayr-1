@@ -319,7 +319,7 @@ struct OTPVerificationView: View {
                     if isNewUser {
                         authManager.authState = .profileSetup
                     } else {
-                        authManager.authState = .login
+                        authManager.authState = .authenticated
                     }
                 }
 

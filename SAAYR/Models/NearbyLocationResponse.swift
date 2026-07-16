@@ -59,6 +59,13 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
         .init(latitude: latitude, longitude: longitude)
     }
 
+    var uniqueKey: String {
+        let typeValue = type ?? "unknown"
+        let latText = String(format: "%.6f", latitude)
+        let lngText = String(format: "%.6f", longitude)
+        return "\(id)|\(typeValue)|\(latText)|\(lngText)"
+    }
+
     var hasPolygon: Bool {
         boundary_polygon?.isEmpty == false
     }
@@ -196,15 +203,6 @@ final class LocationAPI {
         radiusKM: Int = 5,
         completion: @escaping @Sendable ([NearbyLocationResponse], ZoneUnlockInfo?) -> Void
     ) {
-        // Check if cache is fresh (skip API call)
-        if let timestamp = cacheTimestamp,
-           Date().timeIntervalSince(timestamp) < cacheExpiry {
-            DispatchQueue.main.async {
-                completion(self.cachedNearby, nil)
-            }
-            return
-        }
-        
         // Debounce rapid requests
         if let lastFetch = lastFetchTime,
            Date().timeIntervalSince(lastFetch) < debounceInterval {

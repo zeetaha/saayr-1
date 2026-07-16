@@ -196,18 +196,48 @@ class AuthManager: ObservableObject {
                             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                                 
                                 let success = json["success"] as? Bool ?? false
-                                if success, let data = json["data"] as? [String: Any] {
-                                    let isNewUser = data["is_new_user"] as? Bool ?? false
-                                    let userId = data["user_id"] as? Int
+                                if success {
+                                    let isNewUser = json["is_new_user"] as? Bool ?? false
+                                    let userId = json["user_id"] as? Int
                                     
                                     print("✅ OTP Verified")
                                     print("🆕 Is New User:", isNewUser)
                                     print("👤 User ID:", userId ?? -1)
+                                    if isNewUser{
+                                        onResult(isNewUser)
+                                    }else{
+                                        if let accessToken = json["access_token"] as? String,
+                                           let userId = json["user_id"] as? Int {
+                                            
+                                            print("✅ Auth Success")
+                                            
+                                            let refreshToken = json["refresh_token"] as? String ?? ""
+                                            let expiresIn = json["expires_in"] as? TimeInterval ?? 3600
+                                            TokenManager.shared.saveTokens(
+                                                access: accessToken,
+                                                refresh: refreshToken,
+                                                expiresIn: expiresIn
+                                            )
+                                            
+                                            let user = User(
+                                                email: self.tempEmail,
+                                                firstName: self.tempFullName,
+                                                lastName: "",
+                                                accessToken: accessToken,
+                                                refreshToken: refreshToken,
+                                                id: userId
+                                            )
+                                            UserModel.shared.saveUser(user)
+                                            self.completeAuthentication()
+                                            onResult(isNewUser)
+                                        } else {
+                                            self.errorMessage = "Unexpected response from server"
+                                            print("❌ Error:", self.errorMessage ?? "")
+                                        }
+                                    }
                                     
-                                    onResult(isNewUser)
-                                    
+                                  
                                 } else {
-                                    // ✅ HERE json exists
                                     self.errorMessage = json["message"] as? String ?? "OTP failed"
                                     print("❌ OTP Failed:", self.errorMessage ?? "")
                                 }
@@ -231,7 +261,7 @@ class AuthManager: ObservableObject {
     
     
     func completeSignup(onSuccess: @escaping () -> Void) {
-        guard !tempFullName.isEmpty, !tempPasscode.isEmpty else { return }
+        guard !tempFullName.isEmpty else { return }
         guard tempEmail.isEmpty || tempEmail.contains("@") else { return }
         
         isLoading = true
@@ -241,9 +271,12 @@ class AuthManager: ObservableObject {
         var parameters: [String: Any] = [
             "phone_number": "966" + phoneNumber,
             "full_name": tempFullName,
-            "email": tempEmail,
-            "passcode": tempPasscode
+            "email": tempEmail
         ]
+
+        if !tempPasscode.isEmpty {
+            parameters["passcode"] = tempPasscode
+        }
         
         
         
@@ -393,22 +426,22 @@ class AuthManager: ObservableObject {
     }
     
     func sendPinFlow() {
-        
         isLoading = true
         errorMessage = nil
-        
-        // Simulate API call to send OTP
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.isLoading = false
-            
-            // In production, this would call your backend API
-            // For demo, we'll simulate success
-            withAnimation {
-                self?.authState = .pinFlow
+        print("Sending pin flow...")
+
+        completeSignup { [weak self] in
+            guard let self else { return }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isLoading = false
+
+                withAnimation {
+                    self.authState = .petName
+                    print("Pin flow sent")
+                }
             }
-            
-            // For demo purposes - print OTP code (in production, this comes via SMS)
-            print("📱 Demo pin Code: 123456")
         }
     }
     

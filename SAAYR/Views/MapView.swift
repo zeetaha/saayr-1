@@ -296,9 +296,12 @@ struct MapView: View {
             latitude: coordinate.latitude,
             longitude: coordinate.longitude
         ) { newItems, unlockInfo in
-            let existingIDs = Set(locations.map { $0.id })
-            let filtered = newItems.filter { !existingIDs.contains($0.id) }
-            locations.append(contentsOf: filtered)
+            var seenKeys = Set<String>()
+            let refreshed = newItems.filter { item in
+                let inserted = seenKeys.insert(item.uniqueKey).inserted
+                return inserted
+            }
+            locations = refreshed
 
             if let unlock = unlockInfo {
                 fetchFogZones()

@@ -44,6 +44,7 @@ struct Redemption: Codable, Identifiable {
     let claimedAt: String?
     let redeemedAt: String?
     let redemptionInstructions: String?
+    let imageUrl: String?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -57,6 +58,7 @@ struct Redemption: Codable, Identifiable {
         case claimedAt = "claimed_at"
         case redeemedAt = "redeemed_at"
         case redemptionInstructions = "redemption_instructions"
+        case imageUrl = "image_url"
     }
 
     init(from decoder: Decoder) throws {
@@ -72,5 +74,6 @@ struct Redemption: Codable, Identifiable {
         claimedAt = try container.decodeIfPresent(String.self, forKey: .claimedAt)
         redeemedAt = try container.decodeIfPresent(String.self, forKey: .redeemedAt)
         redemptionInstructions = try container.decodeIfPresent(String.self, forKey: .redemptionInstructions)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
     }
 }

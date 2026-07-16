@@ -87,7 +87,7 @@ struct MapboxMapContainer: UIViewRepresentable {
         context.coordinator.syncAnnotations(
             mapView: mapView,
             locations: locations,
-            selectedId: selectedLocation?.id
+            selectedKey: selectedLocation?.uniqueKey
         )
 
         context.coordinator.syncPolygon(
@@ -126,7 +126,7 @@ struct MapboxMapContainer: UIViewRepresentable {
         var parent: MapboxMapContainer
         weak var mapView: MapboxMaps.MapView?
 
-        var annotationViews: [Int: UIView] = [:]
+        var annotationViews: [String: UIView] = [:]
         private var lastDigest: Int = -1
 
         var cameraObserver: Cancelable?
@@ -142,9 +142,9 @@ struct MapboxMapContainer: UIViewRepresentable {
         func syncAnnotations(
             mapView: MapboxMaps.MapView,
             locations: [NearbyLocationResponse],
-            selectedId: Int?
+            selectedKey: String?
         ) {
-            let digest = locations.count * 200_003 + (selectedId ?? 0)
+            let digest = locations.map(\.uniqueKey).joined(separator: "|").hashValue ^ (selectedKey?.hashValue ?? 0)
             guard digest != lastDigest else { return }
             lastDigest = digest
 
@@ -155,10 +155,10 @@ struct MapboxMapContainer: UIViewRepresentable {
 
             for location in locations {
 
-                let isActive = location.id == selectedId
+                let isActive = location.uniqueKey == selectedKey
                 let view = makeAnnotationView(for: location, isActive: isActive)
 
-                annotationViews[location.id] = view
+                annotationViews[location.uniqueKey] = view
 
                 // ✅ FIXED Point usage for v11
                 let point = Point(
@@ -193,7 +193,7 @@ struct MapboxMapContainer: UIViewRepresentable {
             let hc = UIHostingController(rootView: merchantView)
             hc.view.backgroundColor = .clear
             hc.view.frame = CGRect(x: 0, y: 0, width: 60, height: 72)
-            hc.view.tag = location.id
+            hc.view.accessibilityIdentifier = location.uniqueKey
 
             hc.view.addGestureRecognizer(
                 UITapGestureRecognizer(
@@ -206,9 +206,9 @@ struct MapboxMapContainer: UIViewRepresentable {
         }
 
         @objc private func handleAnnotationTap(_ sender: UITapGestureRecognizer) {
-            guard let id = sender.view?.tag,
+            guard let key = sender.view?.accessibilityIdentifier,
                   !parent.isCheckingIn,
-                  let location = parent.locations.first(where: { $0.id == id })
+                  let location = parent.locations.first(where: { $0.uniqueKey == key })
             else { return }
 
             parent.onTapLocation(location)

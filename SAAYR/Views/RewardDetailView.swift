@@ -64,18 +64,64 @@ struct RewardDetailView: View {
                         VStack(spacing: 16) {
                             // MARK: Icon & Title
                             VStack(spacing: 16) {
-                                Image(systemName: "gift.fill")
-                                    .font(.system(size: 56, weight: .semibold))
-                                    .foregroundColor(.white)
+                                if let urlString = data.imageUrl, let url = URL(string: urlString) {
+                                    AsyncImage(url: url) { phase in
+                                        switch phase {
+                                        case .empty:
+                                            ZStack {
+                                                LinearGradient(
+                                                    colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                                ProgressView()
+                                                    .tint(.white)
+                                            }
+                                        case .success(let image):
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                        case .failure(_):
+                                            ZStack {
+                                                LinearGradient(
+                                                    colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                                Image(systemName: "gift.fill")
+                                                    .font(.system(size: 56, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                            }
+                                        @unknown default:
+                                            ZStack {
+                                                LinearGradient(
+                                                    colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                                Image(systemName: "gift.fill")
+                                                    .font(.system(size: 56, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+                                    }
                                     .frame(width: 100, height: 100)
-                                    .background(
+                                    .cornerRadius(20)
+                                    .clipped()
+                                } else {
+                                    ZStack {
                                         LinearGradient(
                                             colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         )
-                                    )
+                                        Image(systemName: "gift.fill")
+                                            .font(.system(size: 56, weight: .semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                    .frame(width: 100, height: 100)
                                     .cornerRadius(20)
+                                }
                                 
                                 VStack(spacing: 8) {
                                     Text(data.rewardTitle ?? "")

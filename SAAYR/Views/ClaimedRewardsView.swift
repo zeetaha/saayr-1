@@ -156,18 +156,64 @@ struct ClaimedRewardCard: View {
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
                     // Icon
-                    Image(systemName: "gift.fill")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(.white)
+                    if let urlString = redemption.imageUrl, let url = URL(string: urlString) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                ZStack {
+                                    LinearGradient(
+                                        colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure(_):
+                                ZStack {
+                                    LinearGradient(
+                                        colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    Image(systemName: "gift.fill")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                            @unknown default:
+                                ZStack {
+                                    LinearGradient(
+                                        colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    Image(systemName: "gift.fill")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                        }
                         .frame(width: 56, height: 56)
-                        .background(
+                        .cornerRadius(12)
+                        .clipped()
+                    } else {
+                        ZStack {
                             LinearGradient(
                                 colors: [Color(hex: "#8B5CF6"), Color(hex: "#A855F7")],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
-                        )
+                            Image(systemName: "gift.fill")
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 56, height: 56)
                         .cornerRadius(12)
+                    }
                     
                     VStack(alignment: .leading, spacing: 6) {
                         Text(redemption.rewardTitle ?? "")
