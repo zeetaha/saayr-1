@@ -15,7 +15,6 @@ struct MapView: View {
 
     // Fog of War
     @State private var fogZones: [Zone] = []
-    @State private var fogLoaded = false
     @State private var pendingUnlock: ZoneUnlockInfo? = nil
     @State private var showUnlockPopup = false
 
@@ -27,6 +26,12 @@ struct MapView: View {
         centerLat: 24.7136, centerLng: 46.6753,   // Riyadh default
         latDelta: 0.5, lngDelta: 0.5
     )
+
+    /// Latest camera zoom, so the +/- buttons step from wherever the user is.
+    @State private var currentZoom: Double = 15
+
+    private static let minZoom: Double = 3
+    private static let maxZoom: Double = 20
 
     @State var errorMessage: String = ""
     @State var successMessage: String = ""
@@ -57,8 +62,10 @@ struct MapView: View {
                 selectedLocation: $selectedLocation,
                 focusOn: $focusOn,
                 merchantPolygon: selectedLocation?.boundary_polygon,
+                zones: fogZones,
                 isCheckingIn: isDwelling,
                 onCameraChanged: { cameraState in
+                    currentZoom = cameraState.zoom
                     // Update visible region for fog overlay
                     visibleRegion = VisibleMapRegion(
                         centerLat: cameraState.center.latitude,
@@ -75,12 +82,8 @@ struct MapView: View {
             )
             .ignoresSafeArea()
 
-            // MARK: Fog of War
-            if fogLoaded {
-                FogOverlayView(zones: fogZones, visibleRegion: visibleRegion)
-                    .transition(.opacity)
-                    .animation(.easeIn(duration: 0.5), value: fogLoaded)
-            }
+            // Zones are drawn by MapboxMapContainer as map layers, so they stay
+            // aligned under rotation and tilt.
 
             // MARK: Weather Overlay
             WeatherOverlayView(condition: weatherManager.condition)
@@ -167,28 +170,54 @@ struct MapView: View {
                 }
             }
             
-            // MARK: Current Location Button
+            // MARK: Map Controls (zoom + recenter)
             if !isDwelling {
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
-                        Button {
-                            if let location = locationManager.currentLocation {
-                                // Force camera to user location regardless of distance threshold
-                                lastAutoCenter = location.coordinate
-                                withAnimation {
-                                    moveToUser(location)
+                        VStack(spacing: 12) {
+
+                            // Zoom in / out
+                            VStack(spacing: 0) {
+                                mapControlButton(
+                                    systemName: "plus",
+                                    isEnabled: currentZoom < Self.maxZoom
+                                ) {
+                                    stepZoom(by: 1)
+                                }
+
+                                Divider().frame(width: 28)
+
+                                mapControlButton(
+                                    systemName: "minus",
+                                    isEnabled: currentZoom > Self.minZoom
+                                ) {
+                                    stepZoom(by: -1)
                                 }
                             }
-                        } label: {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.blue)
-                                .frame(width: 48, height: 48)
-                                .background(Color.white)
-                                .clipShape(Circle())
-                                .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+
+                            // Recenter on the user
+                            Button {
+                                if let location = locationManager.currentLocation {
+                                    // Force camera to user location regardless of distance threshold
+                                    lastAutoCenter = location.coordinate
+                                    withAnimation {
+                                        moveToUser(location)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "location.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.blue)
+                                    .frame(width: 48, height: 48)
+                                    .background(Color.white)
+                                    .clipShape(Circle())
+                                    .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+                            }
                         }
                         .padding(.trailing, 16)
                         .padding(.bottom, selectedLocation != nil ? 180 : 32)
@@ -311,11 +340,46 @@ struct MapView: View {
         }
     }
 
+    // MARK: - Zoom Controls
+
+    private func mapControlButton(
+        systemName: String,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(isEnabled ? .blue : Color.gray.opacity(0.4))
+                .frame(width: 48, height: 44)
+                .contentShape(Rectangle())
+        }
+        .disabled(!isEnabled)
+    }
+
+    /// Steps the camera one zoom level, keeping the current centre.
+    private func stepZoom(by delta: Double) {
+        let target = min(max(currentZoom + delta, Self.minZoom), Self.maxZoom)
+        guard abs(target - currentZoom) > 0.01 else { return }
+
+        currentZoom = target
+        focusOn = MapCameraFocus(
+            latitude: visibleRegion.centerLat,
+            longitude: visibleRegion.centerLng,
+            zoom: target
+        )
+    }
+
     private func fetchFogZones() {
         ServiceModel.shared.fetchZones { result in
             DispatchQueue.main.async {
-                fogLoaded = true
-                if case .success(let zones) = result { fogZones = zones }
+                switch result {
+                case .success(let zones):
+                    fogZones = zones
+                case .failure(let error):
+                    print("⚠️ Zones unavailable:", error.localizedDescription)
+                    fogZones = []
+                }
             }
         }
     }
@@ -657,6 +721,9 @@ struct MerchantMarkerView: View {
                     .resizable()
                     .scaledToFill()
                     .frame(width: 32, height: 32)
+                    // `scaledToFill` overflows its frame, and the hosting view
+                    // doesn't clip — an oversized photo would paint across the map.
+                    .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 Text(merchant.emoji)
@@ -903,6 +970,10 @@ struct FogOverlayView: View {
 
     var body: some View {
         Canvas { ctx, size in
+            // No zones means nothing to reveal, so drawing the scrim would just
+            // black out the map entirely.
+            guard !zones.isEmpty else { return }
+
             var path = Path()
             path.addRect(CGRect(x: -200, y: -200, width: size.width + 400, height: size.height + 400))
             for zone in zones where zone.is_unlocked {

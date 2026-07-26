@@ -97,6 +97,12 @@ class WebService {
     // Get a free key at https://openweathermap.org/api → Current Weather Data
     static let openWeatherApiKey = "069f0cb00b2de3bc3beecd5deba612e0"
 
+    // MARK: - Mapbox
+    /// The published Saayr style from Mapbox Studio, as `mapbox://styles/saayr/<style-id>`.
+    /// Copy it from Studio → the style's ••• menu → Share → Style URL.
+    /// Leave empty to fall back to Mapbox's built-in Standard style.
+    static let mapboxStyleURL = "mapbox://styles/saayr/cmqmxez25000h01r25rvpdslf"
+
     // MARK: - Convenience
     /// Which environment is active — useful for debug banners or logging.
     static var environmentName: String {

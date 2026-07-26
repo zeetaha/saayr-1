@@ -31,11 +31,21 @@ struct MapboxMapContainer: UIViewRepresentable {
     @Binding var focusOn: MapCameraFocus?
 
     var merchantPolygon: [PolygonPoint]?
+    var zones: [Zone]
     var isCheckingIn: Bool
     var onCameraChanged: (MapboxCameraState) -> Void
     var onTapLocation: (NearbyLocationResponse) -> Void
 
     typealias UIViewType = MapboxMaps.MapView
+
+    /// The custom Saayr style from Mapbox Studio, falling back to Mapbox's
+    /// built-in Standard style when no style URL is configured.
+    static var styleURI: MapboxMaps.StyleURI {
+        guard !WebService.mapboxStyleURL.isEmpty,
+              let custom = MapboxMaps.StyleURI(rawValue: WebService.mapboxStyleURL)
+        else { return .standard }
+        return custom
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -45,7 +55,11 @@ struct MapboxMapContainer: UIViewRepresentable {
 
         let mapView = MapboxMaps.MapView(frame: CGRect.zero)
 
-        mapView.mapboxMap.loadStyle(MapboxMaps.StyleURI.standard)
+        mapView.mapboxMap.loadStyle(Self.styleURI) { error in
+            if let error {
+                print("⚠️ Mapbox style failed to load:", error)
+            }
+        }
 
         mapView.location.options.puckType = MapboxMaps.PuckType.puck2D()
         mapView.mapboxMap.setCamera(
@@ -83,6 +97,9 @@ struct MapboxMapContainer: UIViewRepresentable {
     func updateUIView(_ mapView: MapboxMaps.MapView, context: Context) {
 
         context.coordinator.parent = self
+
+        // Zones first so the merchant polygon and markers draw above them.
+        context.coordinator.syncZones(mapView: mapView, zones: zones)
 
         context.coordinator.syncAnnotations(
             mapView: mapView,
@@ -133,7 +150,28 @@ struct MapboxMapContainer: UIViewRepresentable {
 
         // Polygon annotation state
         private var polygonManager: PolygonAnnotationManager?
+        private var outlineManager: PolylineAnnotationManager?
         private var currentPolygonDigest: Int = -1
+
+        // Zone annotation state
+        private var zoneFillManager: PolygonAnnotationManager?
+        private var zoneOutlineManager: PolylineAnnotationManager?
+        private var currentZonesDigest: Int = -1
+
+        /// Zone boundaries: same green as a merchant, lighter fill because the
+        /// areas are far larger.
+        private enum ZoneStyle {
+            static let stroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 1.0)
+            static let fill   = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.10)
+            static let lineWidth: Double = 2.5
+        }
+
+        /// Deep green boundary over a soft translucent fill.
+        private enum PolygonStyle {
+            static let stroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 1.0)
+            static let fill   = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.14)
+            static let lineWidth: Double = 3
+        }
 
         init(parent: MapboxMapContainer) {
             self.parent = parent
@@ -214,6 +252,75 @@ struct MapboxMapContainer: UIViewRepresentable {
             parent.onTapLocation(location)
         }
 
+        // MARK: - Zone Annotations
+
+        func syncZones(mapView: MapboxMaps.MapView, zones: [Zone]) {
+            let digest = zones
+                .map { "\($0.id):\($0.is_unlocked)" }
+                .joined(separator: "|")
+                .hashValue
+            guard digest != currentZonesDigest else { return }
+            currentZonesDigest = digest
+
+            if zoneFillManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "zones-fill")
+                zoneFillManager = nil
+            }
+            if zoneOutlineManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "zones-outline")
+                zoneOutlineManager = nil
+            }
+
+            let unlocked = zones.filter(\.is_unlocked)
+            guard !unlocked.isEmpty else { return }
+
+            let rings = unlocked
+                .map { zone in
+                    zone.boundary_polygon.map {
+                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
+                    }
+                }
+                .filter { $0.count >= 3 }
+
+            // Fills abut without overlapping, so drawing them per zone already
+            // reads as one shape.
+            var fills: [PolygonAnnotation] = []
+            for coords in rings {
+                let shape = Polygon(outerRing: Ring(coordinates: coords), innerRings: [])
+                var fill = PolygonAnnotation(polygon: shape)
+                fill.fillColor = ZoneStyle.fill
+                fills.append(fill)
+            }
+
+            // Outlines are merged so the seams between neighbouring zones
+            // aren't drawn — only the outer boundary of the whole group.
+            let (boxes, others) = ZoneBoundaryMerger.partition(rings)
+            var outlineRings = ZoneBoundaryMerger.unionRings(of: boxes)
+            outlineRings += others.map { ring in
+                ring + (ring.first.map { [$0] } ?? [])
+            }
+
+            var outlines: [PolylineAnnotation] = []
+            for ring in outlineRings where ring.count >= 2 {
+                var outline = PolylineAnnotation(lineCoordinates: ring)
+                outline.lineColor = ZoneStyle.stroke
+                outline.lineWidth = ZoneStyle.lineWidth
+                outline.lineJoin = .round
+                outlines.append(outline)
+            }
+
+            guard !fills.isEmpty else { return }
+
+            let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fill")
+            fillManager.annotations = fills
+            zoneFillManager = fillManager
+
+            let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "zones-outline")
+            lineManager.lineCap = .round
+            lineManager.annotations = outlines
+            zoneOutlineManager = lineManager
+        }
+
         // MARK: - Polygon Annotation
 
         func syncPolygon(mapView: MapboxMaps.MapView, polygon: [PolygonPoint]?) {
@@ -227,6 +334,10 @@ struct MapboxMapContainer: UIViewRepresentable {
                 mapView.annotations.removeAnnotationManager(withId: "merchant-polygon")
                 polygonManager = nil
             }
+            if outlineManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "merchant-polygon-outline")
+                outlineManager = nil
+            }
 
             guard let points = polygon, points.count >= 3 else { return }
 
@@ -234,17 +345,29 @@ struct MapboxMapContainer: UIViewRepresentable {
             let outerRing = Ring(coordinates: coords)
             let polygonShape = Polygon(outerRing: outerRing, innerRings: [])
 
-            var annotation = PolygonAnnotation(polygon: polygonShape)
-            annotation.fillColor = StyleColor(red: 34, green: 139, blue: 34, alpha: 0.15)
-            annotation.fillOutlineColor = StyleColor(red: 34, green: 139, blue: 34, alpha: 1.0)
+            // Fill only — `fillOutlineColor` can just draw a hairline, so the
+            // boundary is a separate line layer that can carry real weight.
+            var fillAnnotation = PolygonAnnotation(polygon: polygonShape)
+            fillAnnotation.fillColor = PolygonStyle.fill
 
-            do {
-                let manager = try mapView.annotations.makePolygonAnnotationManager(id: "merchant-polygon")
-                manager.annotations = [annotation]
-                polygonManager = manager
-            } catch {
-                print("⚠️ Failed to create polygon annotation: \(error)")
-            }
+            let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "merchant-polygon")
+            fillManager.annotations = [fillAnnotation]
+            polygonManager = fillManager
+
+            // Repeat the first point so the stroke closes the ring.
+            var ringCoords = coords
+            if let first = coords.first { ringCoords.append(first) }
+
+            var outlineAnnotation = PolylineAnnotation(lineCoordinates: ringCoords)
+            outlineAnnotation.lineColor = PolygonStyle.stroke
+            outlineAnnotation.lineWidth = PolygonStyle.lineWidth
+            outlineAnnotation.lineJoin = .round
+
+            // Created after the fill so the stroke draws on top of it.
+            let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "merchant-polygon-outline")
+            lineManager.lineCap = .round
+            lineManager.annotations = [outlineAnnotation]
+            outlineManager = lineManager
         }
     }
 }
