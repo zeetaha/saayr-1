@@ -33,6 +33,9 @@ struct MapView: View {
     private static let minZoom: Double = 3
     private static let maxZoom: Double = 20
 
+    /// Where the map sits until a fix arrives.
+    static let riyadh = CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753)
+
     @State var errorMessage: String = ""
     @State var successMessage: String = ""
     @State private var showAlert: Bool = false
@@ -63,6 +66,7 @@ struct MapView: View {
                 focusOn: $focusOn,
                 merchantPolygon: selectedLocation?.boundary_polygon,
                 zones: fogZones,
+                isArabic: languageManager.currentLanguage == .arabic,
                 isCheckingIn: isDwelling,
                 onCameraChanged: { cameraState in
                     currentZoom = cameraState.zoom
@@ -82,8 +86,9 @@ struct MapView: View {
             )
             .ignoresSafeArea()
 
-            // Zones are drawn by MapboxMapContainer as map layers, so they stay
-            // aligned under rotation and tilt.
+            // The fog of war and the revealed zones are drawn by
+            // MapboxMapContainer as map layers, so they stay anchored to the
+            // streets through pan, zoom, rotation and tilt.
 
             // MARK: Weather Overlay
             WeatherOverlayView(condition: weatherManager.condition)
@@ -202,17 +207,11 @@ struct MapView: View {
 
                             // Recenter on the user
                             Button {
-                                if let location = locationManager.currentLocation {
-                                    // Force camera to user location regardless of distance threshold
-                                    lastAutoCenter = location.coordinate
-                                    withAnimation {
-                                        moveToUser(location)
-                                    }
-                                }
+                                recenterOnUser()
                             } label: {
-                                Image(systemName: "location.fill")
+                                Image(systemName: hasLocationFix ? "location.fill" : "location.slash")
                                     .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(hasLocationFix ? .blue : .gray)
                                     .frame(width: 48, height: 48)
                                     .background(Color.white)
                                     .clipShape(Circle())
@@ -259,9 +258,16 @@ struct MapView: View {
         }
         .onAppear {
             locationManager.requestPermission()
+            // `requestPermission` only fires the authorization callback (and so
+            // `startUpdating`) when the status is still undetermined, so kick
+            // updates directly for the already-authorized case.
+            locationManager.startUpdating()
             fetchFogZones()
         }
-        .onReceive(locationManager.$currentLocation.compactMap { $0 }) { location in
+        // Driven by the raw fix, not the filtered one: following the user and
+        // listing nearby merchants shouldn't stall because a fix was too coarse
+        // to check in with.
+        .onReceive(locationManager.$lastRawLocation.compactMap { $0 }) { location in
             let coord = location.coordinate
 
             // Auto-center only on first fix or when user has moved > 200m
@@ -307,6 +313,69 @@ struct MapView: View {
 
         if distanceKM >= 5 {
             scheduleNearbyFetch(newCenter)
+        }
+    }
+
+    /// Where to point the camera. Falls back to the raw fix so a position the
+    /// anti-cheat filter rejected can still be looked at — it just can't be
+    /// checked in from.
+    private var cameraLocation: CLLocation? {
+        locationManager.currentLocation ?? locationManager.lastRawLocation
+    }
+
+    /// Whether we have a position good enough to recenter on.
+    private var hasLocationFix: Bool {
+        cameraLocation != nil
+    }
+
+    /// Why there's no usable position, phrased for the person holding the phone.
+    private var locationUnavailableMessage: String {
+        switch locationManager.authorizationStatus {
+        case .denied, .restricted:
+            return "Location access is off. Enable it in Settings to check in."
+        case .notDetermined:
+            return "SAAYR needs location access to check in."
+        default:
+            break
+        }
+
+        if locationManager.lastLocationError == .locationUnknown {
+            return "Can't get a GPS signal right now. Move somewhere with a clearer view of the sky."
+        }
+        return "Still finding your location. Please try again in a moment."
+    }
+
+    /// Recenters on the user, or explains why it can't instead of doing nothing.
+    private func recenterOnUser() {
+        if let location = cameraLocation {
+            // Force the camera regardless of the auto-center distance threshold.
+            lastAutoCenter = location.coordinate
+            withAnimation {
+                moveToUser(location)
+            }
+            return
+        }
+
+        switch locationManager.authorizationStatus {
+        case .denied, .restricted:
+            errorMessage = "Location access is off. Showing Riyadh instead."
+        case .notDetermined:
+            locationManager.requestPermission()
+            errorMessage = "Waiting for location permission. Showing Riyadh instead."
+        default:
+            // Authorized but nothing has arrived yet — nudge Core Location.
+            locationManager.startUpdating()
+            errorMessage = "Still finding your location. Showing Riyadh instead."
+        }
+
+        // Never leave the button dead: without a fix, fall back to the city.
+        withAnimation {
+            focusOn = MapCameraFocus(
+                latitude: Self.riyadh.latitude,
+                longitude: Self.riyadh.longitude,
+                zoom: 11
+            )
+            showAlert = true
         }
     }
 
@@ -428,7 +497,7 @@ struct MapView: View {
 
     private func beginCheckIn(_ location: NearbyLocationResponse) {
         guard locationManager.currentLocation != nil else {
-            errorMessage = "Unable to determine your location. Please try again."
+            errorMessage = locationUnavailableMessage
             showAlert = true
             return
         }
@@ -459,7 +528,7 @@ struct MapView: View {
             }
         } else {
             isValidating = false
-            errorMessage = "Unable to determine your location. Please try again."
+            errorMessage = locationUnavailableMessage
             showAlert = true
             selectedLocation = nil
         }
@@ -519,7 +588,7 @@ struct MapView: View {
         } else {
             isValidating = false
             isSubmittingFinalCheckIn = false
-            errorMessage = "Unable to determine your location. Please try again."
+            errorMessage = locationUnavailableMessage
             showAlert = true
         }
     }
@@ -960,50 +1029,6 @@ struct MerchantWithDistance: Identifiable {
     let id = UUID()
     let merchant: MerchantLocation
     let distance: Double
-}
-
-// MARK: - Fog Overlay
-
-struct FogOverlayView: View {
-    let zones: [Zone]
-    let visibleRegion: VisibleMapRegion
-
-    var body: some View {
-        Canvas { ctx, size in
-            // No zones means nothing to reveal, so drawing the scrim would just
-            // black out the map entirely.
-            guard !zones.isEmpty else { return }
-
-            var path = Path()
-            path.addRect(CGRect(x: -200, y: -200, width: size.width + 400, height: size.height + 400))
-            for zone in zones where zone.is_unlocked {
-                let pts = zone.boundary_polygon.map {
-                    mapPoint(lat: $0.lat, lng: $0.lng, size: size)
-                }
-                guard let first = pts.first else { continue }
-                path.move(to: first)
-                pts.dropFirst().forEach { path.addLine(to: $0) }
-                path.closeSubpath()
-            }
-            ctx.fill(path, with: .color(.black.opacity(0.72)), style: FillStyle(eoFill: true))
-        }
-        .allowsHitTesting(false)
-        .ignoresSafeArea()
-    }
-
-    private func mapPoint(lat: Double, lng: Double, size: CGSize) -> CGPoint {
-        let minLat = visibleRegion.centerLat - visibleRegion.latDelta / 2
-        let maxLat = visibleRegion.centerLat + visibleRegion.latDelta / 2
-        let minLng = visibleRegion.centerLng - visibleRegion.lngDelta / 2
-        let maxLng = visibleRegion.centerLng + visibleRegion.lngDelta / 2
-        let latRange = maxLat - minLat
-        let lngRange = maxLng - minLng
-        guard latRange != 0, lngRange != 0 else { return .zero }
-        return CGPoint(
-            x: (lng - minLng) / lngRange * size.width,
-            y: (1.0 - (lat - minLat) / latRange) * size.height
-        )
-    }
 }
 
 // MARK: - Zone Unlock Popup

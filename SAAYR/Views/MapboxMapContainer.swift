@@ -32,6 +32,8 @@ struct MapboxMapContainer: UIViewRepresentable {
 
     var merchantPolygon: [PolygonPoint]?
     var zones: [Zone]
+    /// Picks `name_ar` over `name` for the zone labels.
+    var isArabic: Bool
     var isCheckingIn: Bool
     var onCameraChanged: (MapboxCameraState) -> Void
     var onTapLocation: (NearbyLocationResponse) -> Void
@@ -62,9 +64,12 @@ struct MapboxMapContainer: UIViewRepresentable {
         }
 
         mapView.location.options.puckType = MapboxMaps.PuckType.puck2D()
+        // Without a center the camera starts at 0,0 in the Atlantic. Riyadh is
+        // the sensible placeholder until the first fix moves us.
         mapView.mapboxMap.setCamera(
             to: CameraOptions(
-                zoom: 15,
+                center: MapView.riyadh,
+                zoom: 11,
                 bearing: 0, pitch: 30
             )
         )
@@ -99,7 +104,11 @@ struct MapboxMapContainer: UIViewRepresentable {
         context.coordinator.parent = self
 
         // Zones first so the merchant polygon and markers draw above them.
-        context.coordinator.syncZones(mapView: mapView, zones: zones)
+        context.coordinator.syncZones(
+            mapView: mapView,
+            zones: zones,
+            isArabic: isArabic
+        )
 
         context.coordinator.syncAnnotations(
             mapView: mapView,
@@ -154,17 +163,54 @@ struct MapboxMapContainer: UIViewRepresentable {
         private var currentPolygonDigest: Int = -1
 
         // Zone annotation state
+        private var zoneFogManager: PolygonAnnotationManager?
         private var zoneFillManager: PolygonAnnotationManager?
         private var zoneOutlineManager: PolylineAnnotationManager?
+        private var zoneLockedFillManager: PolygonAnnotationManager?
+        private var zoneLockedOutlineManager: PolylineAnnotationManager?
+        private var zoneLabelManager: PointAnnotationManager?
         private var currentZonesDigest: Int = -1
 
         /// Zone boundaries: same green as a merchant, lighter fill because the
-        /// areas are far larger.
+        /// areas are far larger. `fog` dims everything outside them.
         private enum ZoneStyle {
             static let stroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 1.0)
             static let fill   = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.10)
+            static let fog    = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.18)
             static let lineWidth: Double = 2.5
+
+            /// Locked zones are shaded as their own block — darker than the
+            /// surrounding fog — with a muted boundary so they read as regions
+            /// waiting to be unlocked rather than as explored ground.
+            static let lockedFill   = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.25)
+            static let lockedStroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.45)
+            static let lockedLineWidth: Double = 1.5
+
+            /// Zone names: same green as the boundary on a white halo where the
+            /// zone is revealed, inverted over the dark shading where it isn't.
+            static let labelColor     = StyleColor(red: 16, green: 78, blue: 52, alpha: 1.0)
+            static let labelHalo      = StyleColor(red: 255, green: 255, blue: 255, alpha: 0.9)
+            static let lockedLabelColor = StyleColor(red: 240, green: 246, blue: 243, alpha: 1.0)
+            static let lockedLabelHalo  = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.7)
+            static let labelSize: Double      = 15
+            static let labelHaloWidth: Double = 1.6
         }
+
+        /// Standard-style slot for everything we draw. `top` sits above the
+        /// basemap's labels and POIs but still inside the imported style, so the
+        /// location puck — which has no slot and therefore sits above the whole
+        /// import — keeps rendering over our layers instead of under the fog.
+        private static let overlaySlot = "top"
+
+        /// Outer ring for the fog polygon. Stops short of the antimeridian and
+        /// the poles so the shape never wraps on itself.
+        private static let worldRing = Ring(coordinates: [
+            CLLocationCoordinate2D(latitude: -85, longitude: -179.9),
+            CLLocationCoordinate2D(latitude: -85, longitude:  179.9),
+            CLLocationCoordinate2D(latitude:  85, longitude:  179.9),
+            CLLocationCoordinate2D(latitude:  85, longitude: -179.9),
+            CLLocationCoordinate2D(latitude: -85, longitude: -179.9)
+        ])
 
         /// Deep green boundary over a soft translucent fill.
         private enum PolygonStyle {
@@ -254,14 +300,18 @@ struct MapboxMapContainer: UIViewRepresentable {
 
         // MARK: - Zone Annotations
 
-        func syncZones(mapView: MapboxMaps.MapView, zones: [Zone]) {
-            let digest = zones
+        func syncZones(mapView: MapboxMaps.MapView, zones: [Zone], isArabic: Bool) {
+            let digest = (zones
                 .map { "\($0.id):\($0.is_unlocked)" }
-                .joined(separator: "|")
+                .joined(separator: "|") + "|ar:\(isArabic)")
                 .hashValue
             guard digest != currentZonesDigest else { return }
             currentZonesDigest = digest
 
+            if zoneFogManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "zones-fog")
+                zoneFogManager = nil
+            }
             if zoneFillManager != nil {
                 mapView.annotations.removeAnnotationManager(withId: "zones-fill")
                 zoneFillManager = nil
@@ -270,6 +320,24 @@ struct MapboxMapContainer: UIViewRepresentable {
                 mapView.annotations.removeAnnotationManager(withId: "zones-outline")
                 zoneOutlineManager = nil
             }
+            if zoneLockedFillManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "zones-locked-fill")
+                zoneLockedFillManager = nil
+            }
+            if zoneLockedOutlineManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "zones-locked-outline")
+                zoneLockedOutlineManager = nil
+            }
+            if zoneLabelManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "zones-labels")
+                zoneLabelManager = nil
+            }
+
+            // Deferred so the names are the last manager created and therefore
+            // draw above every shaded region, whichever way this function exits.
+            defer { installZoneLabels(mapView: mapView, zones: zones, isArabic: isArabic) }
+
+            installLockedZones(mapView: mapView, zones: zones)
 
             let unlocked = zones.filter(\.is_unlocked)
             guard !unlocked.isEmpty else { return }
@@ -311,14 +379,134 @@ struct MapboxMapContainer: UIViewRepresentable {
 
             guard !fills.isEmpty else { return }
 
+            // Fog of war: one huge polygon with the explored area punched out as
+            // holes. It's a real geo feature, so the scrim stays glued to the
+            // streets through pan, zoom, rotate and tilt.
+            let holes = outlineRings.filter { $0.count >= 4 }.map { Ring(coordinates: $0) }
+            if !holes.isEmpty {
+                var fog = PolygonAnnotation(
+                    polygon: Polygon(outerRing: Self.worldRing, innerRings: holes)
+                )
+                fog.fillColor = ZoneStyle.fog
+
+                // Created first so everything else draws over the fog.
+                let fogManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fog")
+                fogManager.slot = Self.overlaySlot
+                fogManager.annotations = [fog]
+                zoneFogManager = fogManager
+            }
+
             let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fill")
+            fillManager.slot = Self.overlaySlot
             fillManager.annotations = fills
             zoneFillManager = fillManager
 
             let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "zones-outline")
+            lineManager.slot = Self.overlaySlot
             lineManager.lineCap = .round
             lineManager.annotations = outlines
             zoneOutlineManager = lineManager
+        }
+
+        /// Shades every locked zone as its own dark block with a soft boundary,
+        /// so the areas still to be unlocked are visible as regions.
+        private func installLockedZones(mapView: MapboxMaps.MapView, zones: [Zone]) {
+            let rings = zones
+                .filter { !$0.is_unlocked }
+                .map { zone in
+                    zone.boundary_polygon.map {
+                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
+                    }
+                }
+                .filter { $0.count >= 3 }
+
+            guard !rings.isEmpty else { return }
+
+            var fills: [PolygonAnnotation] = []
+            var outlines: [PolylineAnnotation] = []
+            for coords in rings {
+                var fill = PolygonAnnotation(
+                    polygon: Polygon(outerRing: Ring(coordinates: coords), innerRings: [])
+                )
+                fill.fillColor = ZoneStyle.lockedFill
+                fills.append(fill)
+
+                // Repeat the first point so the stroke closes the ring.
+                var ring = coords
+                if let first = coords.first { ring.append(first) }
+
+                var outline = PolylineAnnotation(lineCoordinates: ring)
+                outline.lineColor = ZoneStyle.lockedStroke
+                outline.lineWidth = ZoneStyle.lockedLineWidth
+                outline.lineJoin = .round
+                outlines.append(outline)
+            }
+
+            let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-locked-fill")
+            fillManager.slot = Self.overlaySlot
+            fillManager.annotations = fills
+            zoneLockedFillManager = fillManager
+
+            let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "zones-locked-outline")
+            lineManager.slot = Self.overlaySlot
+            lineManager.lineCap = .round
+            lineManager.annotations = outlines
+            zoneLockedOutlineManager = lineManager
+        }
+
+        /// One name per zone, green-on-white where the zone is unlocked and
+        /// light-on-dark where it's still shaded.
+        private func installZoneLabels(
+            mapView: MapboxMaps.MapView,
+            zones: [Zone],
+            isArabic: Bool
+        ) {
+            var labels: [PointAnnotation] = []
+            for zone in zones {
+                let title = isArabic
+                    ? (zone.name_ar.isEmpty ? zone.name : zone.name_ar)
+                    : (zone.name.isEmpty ? zone.name_ar : zone.name)
+                guard !title.isEmpty, let center = Self.labelCenter(of: zone) else { continue }
+
+                var label = PointAnnotation(id: "zone-label-\(zone.id)", point: Point(center))
+                label.textField = title
+                label.textColor = zone.is_unlocked ? ZoneStyle.labelColor : ZoneStyle.lockedLabelColor
+                label.textHaloColor = zone.is_unlocked ? ZoneStyle.labelHalo : ZoneStyle.lockedLabelHalo
+                label.textHaloWidth = ZoneStyle.labelHaloWidth
+                label.textSize = ZoneStyle.labelSize
+                label.textAnchor = .center
+                // Long names wrap instead of spilling across the whole zone.
+                label.textMaxWidth = 8
+                labels.append(label)
+            }
+
+            guard !labels.isEmpty else { return }
+
+            let labelManager = mapView.annotations.makePointAnnotationManager(id: "zones-labels")
+            labelManager.slot = Self.overlaySlot
+            // Zone names outrank the basemap's own labels: always draw them, and
+            // don't let them suppress the POI labels underneath.
+            labelManager.textAllowOverlap = true
+            labelManager.textIgnorePlacement = true
+            labelManager.annotations = labels
+            zoneLabelManager = labelManager
+        }
+
+        /// Where a zone's name goes: the API's centre when it parses, otherwise
+        /// the average of the boundary points.
+        private static func labelCenter(of zone: Zone) -> CLLocationCoordinate2D? {
+            if let lat = Double(zone.center_lat), let lng = Double(zone.center_lng),
+               lat != 0 || lng != 0 {
+                return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+            }
+
+            let points = zone.boundary_polygon
+            guard !points.isEmpty else { return nil }
+            let count = Double(points.count)
+            return CLLocationCoordinate2D(
+                latitude: points.reduce(0) { $0 + $1.lat } / count,
+                longitude: points.reduce(0) { $0 + $1.lng } / count
+            )
         }
 
         // MARK: - Polygon Annotation
@@ -351,6 +539,7 @@ struct MapboxMapContainer: UIViewRepresentable {
             fillAnnotation.fillColor = PolygonStyle.fill
 
             let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "merchant-polygon")
+            fillManager.slot = Self.overlaySlot
             fillManager.annotations = [fillAnnotation]
             polygonManager = fillManager
 
@@ -365,6 +554,7 @@ struct MapboxMapContainer: UIViewRepresentable {
 
             // Created after the fill so the stroke draws on top of it.
             let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "merchant-polygon-outline")
+            lineManager.slot = Self.overlaySlot
             lineManager.lineCap = .round
             lineManager.annotations = [outlineAnnotation]
             outlineManager = lineManager

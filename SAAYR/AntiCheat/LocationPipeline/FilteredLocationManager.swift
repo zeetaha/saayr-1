@@ -7,11 +7,21 @@ final class FilteredLocationManager: NSObject, ObservableObject, CLLocationManag
     // MARK: - Published
 
     @Published private(set) var currentLocation: CLLocation?
+
+    /// The newest fix Core Location handed us, before any of the anti-cheat
+    /// filtering below. Only for display — pointing the camera somewhere is
+    /// harmless, so it shouldn't wait on a fix good enough to check in with.
+    /// Anything that grants a reward must still use `currentLocation`.
+    @Published private(set) var lastRawLocation: CLLocation?
     @Published private(set) var filteredLocations: [CLLocation] = []
     @Published private(set) var isStationary: Bool = false
     @Published private(set) var horizontalAccuracy: Double = 0
     @Published private(set) var isSimulated: Bool = false
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
+
+    /// Why Core Location last failed, so the UI can say something better than
+    /// "try again". Cleared as soon as a fix arrives.
+    @Published private(set) var lastLocationError: CLError.Code?
 
     // MARK: - Debug / Simulator Support
 
@@ -115,12 +125,31 @@ final class FilteredLocationManager: NSObject, ObservableObject, CLLocationManag
 
     func locationManager(_ manager: CLLocationManager,
                          didFailWithError error: Error) {
-        print("⚠️ Location error: \(error.localizedDescription)")
+        let code = (error as? CLError)?.code
+        if code == .locationUnknown {
+            // Transient before the first fix — but permanent on a Simulator with
+            // no location set, which looks identical to a device that is simply
+            // still searching.
+            print("⚠️ Location unknown. On the Simulator set Features → Location.")
+        } else {
+            print("⚠️ Location error: \(error.localizedDescription)")
+        }
+
+        DispatchQueue.main.async {
+            self.lastLocationError = code
+        }
     }
 
     // MARK: - Core pipeline
 
     private func processLocation(_ location: CLLocation) {
+
+        // Recorded before the filters so the map always has somewhere to look,
+        // even while every fix is being rejected below.
+        DispatchQueue.main.async {
+            self.lastRawLocation = location
+            self.lastLocationError = nil
+        }
 
         // 1. Simulated location detection
         let simulated: Bool
