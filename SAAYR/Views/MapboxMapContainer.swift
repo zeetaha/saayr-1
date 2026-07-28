@@ -26,7 +26,9 @@ struct VisibleMapRegion {
 
 struct MapboxMapContainer: UIViewRepresentable {
 
-    @Binding var locations: [NearbyLocationResponse]
+    /// Already filtered to what the player is allowed to see — the container
+    /// renders these as-is. Read-only, so it isn't a binding.
+    var locations: [NearbyLocationResponse]
     @Binding var selectedLocation: NearbyLocationResponse?
     @Binding var focusOn: MapCameraFocus?
 
@@ -172,18 +174,26 @@ struct MapboxMapContainer: UIViewRepresentable {
         private var currentZonesDigest: Int = -1
 
         /// Zone boundaries: same green as a merchant, lighter fill because the
-        /// areas are far larger. `fog` dims everything outside them.
+        /// areas are far larger. `fog` blacks out everything outside them.
         private enum ZoneStyle {
             static let stroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 1.0)
             static let fill   = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.10)
-            static let fog    = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.18)
+            /// The rest of the world is blacked out rather than dimmed — only
+            /// the zones are available to be viewed. Held just short of opaque
+            /// so the major roads still ghost through and the blackout reads as
+            /// deliberate rather than as a failed render. This is the knob:
+            /// raise towards 1.0 for a harder blackout, lower for more of the
+            /// basemap. Keep it well clear of `lockedFill` below so locked
+            /// zones stay a distinct shade from out-of-bounds ground.
+            static let fog    = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.82)
             static let lineWidth: Double = 2.5
 
-            /// Locked zones are shaded as their own block — darker than the
-            /// surrounding fog — with a muted boundary so they read as regions
-            /// waiting to be unlocked rather than as explored ground.
-            static let lockedFill   = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.25)
-            static let lockedStroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.45)
+            /// Locked zones sit in their own hole in the fog and are shaded
+            /// here instead — dark enough to read as off-limits, sheer enough
+            /// that the streets still show, so they look like regions waiting
+            /// to be unlocked rather than more blacked-out world.
+            static let lockedFill   = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.58)
+            static let lockedStroke = StyleColor(red: 21, green: 106, blue: 71, alpha: 0.6)
             static let lockedLineWidth: Double = 1.5
 
             /// Zone names: same green as the boundary on a white halo where the
@@ -337,23 +347,19 @@ struct MapboxMapContainer: UIViewRepresentable {
             // draw above every shaded region, whichever way this function exits.
             defer { installZoneLabels(mapView: mapView, zones: zones, isArabic: isArabic) }
 
-            installLockedZones(mapView: mapView, zones: zones)
+            let unlockedRings = Self.rings(of: zones.filter(\.is_unlocked))
+            let lockedRings   = Self.rings(of: zones.filter { !$0.is_unlocked })
 
-            let unlocked = zones.filter(\.is_unlocked)
-            guard !unlocked.isEmpty else { return }
+            // Created first so every shaded region below draws over the fog.
+            installFog(mapView: mapView, zoneRings: unlockedRings + lockedRings)
+            installLockedZones(mapView: mapView, rings: lockedRings)
 
-            let rings = unlocked
-                .map { zone in
-                    zone.boundary_polygon.map {
-                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
-                    }
-                }
-                .filter { $0.count >= 3 }
+            guard !unlockedRings.isEmpty else { return }
 
             // Fills abut without overlapping, so drawing them per zone already
             // reads as one shape.
             var fills: [PolygonAnnotation] = []
-            for coords in rings {
+            for coords in unlockedRings {
                 let shape = Polygon(outerRing: Ring(coordinates: coords), innerRings: [])
                 var fill = PolygonAnnotation(polygon: shape)
                 fill.fillColor = ZoneStyle.fill
@@ -362,14 +368,8 @@ struct MapboxMapContainer: UIViewRepresentable {
 
             // Outlines are merged so the seams between neighbouring zones
             // aren't drawn — only the outer boundary of the whole group.
-            let (boxes, others) = ZoneBoundaryMerger.partition(rings)
-            var outlineRings = ZoneBoundaryMerger.unionRings(of: boxes)
-            outlineRings += others.map { ring in
-                ring + (ring.first.map { [$0] } ?? [])
-            }
-
             var outlines: [PolylineAnnotation] = []
-            for ring in outlineRings where ring.count >= 2 {
+            for ring in Self.mergedRings(of: unlockedRings) where ring.count >= 2 {
                 var outline = PolylineAnnotation(lineCoordinates: ring)
                 outline.lineColor = ZoneStyle.stroke
                 outline.lineWidth = ZoneStyle.lineWidth
@@ -378,23 +378,6 @@ struct MapboxMapContainer: UIViewRepresentable {
             }
 
             guard !fills.isEmpty else { return }
-
-            // Fog of war: one huge polygon with the explored area punched out as
-            // holes. It's a real geo feature, so the scrim stays glued to the
-            // streets through pan, zoom, rotate and tilt.
-            let holes = outlineRings.filter { $0.count >= 4 }.map { Ring(coordinates: $0) }
-            if !holes.isEmpty {
-                var fog = PolygonAnnotation(
-                    polygon: Polygon(outerRing: Self.worldRing, innerRings: holes)
-                )
-                fog.fillColor = ZoneStyle.fog
-
-                // Created first so everything else draws over the fog.
-                let fogManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fog")
-                fogManager.slot = Self.overlaySlot
-                fogManager.annotations = [fog]
-                zoneFogManager = fogManager
-            }
 
             let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fill")
             fillManager.slot = Self.overlaySlot
@@ -408,18 +391,64 @@ struct MapboxMapContainer: UIViewRepresentable {
             zoneOutlineManager = lineManager
         }
 
-        /// Shades every locked zone as its own dark block with a soft boundary,
-        /// so the areas still to be unlocked are visible as regions.
-        private func installLockedZones(mapView: MapboxMaps.MapView, zones: [Zone]) {
-            let rings = zones
-                .filter { !$0.is_unlocked }
+        /// Boundary rings of `zones`, as map coordinates, dropping any too
+        /// degenerate to enclose an area.
+        private static func rings(of zones: [Zone]) -> [[CLLocationCoordinate2D]] {
+            zones
                 .map { zone in
                     zone.boundary_polygon.map {
                         CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
                     }
                 }
                 .filter { $0.count >= 3 }
+        }
 
+        /// Closed rings for the outer boundary of a group of zones, with the
+        /// seams between neighbours dropped where they can be merged exactly.
+        private static func mergedRings(
+            of rings: [[CLLocationCoordinate2D]]
+        ) -> [[CLLocationCoordinate2D]] {
+            let (boxes, others) = ZoneBoundaryMerger.partition(rings)
+            return ZoneBoundaryMerger.unionRings(of: boxes)
+                + others.map { ring in ring + (ring.first.map { [$0] } ?? []) }
+        }
+
+        /// Blacks out everything that isn't a zone: one world-sized polygon with
+        /// every zone punched out as a hole. It's a real geo feature, so the
+        /// blackout stays glued to the streets through pan, zoom, rotate and
+        /// tilt.
+        ///
+        /// Locked zones are punched out too — they're shaded separately by
+        /// `installLockedZones` so they stay legible as regions you haven't
+        /// reached yet. Only genuinely out-of-bounds ground goes black.
+        private func installFog(
+            mapView: MapboxMaps.MapView,
+            zoneRings: [[CLLocationCoordinate2D]]
+        ) {
+            let holes = Self.mergedRings(of: zoneRings)
+                .filter { $0.count >= 4 }
+                .map { Ring(coordinates: $0) }
+            // With no zones loaded the whole map would go black, which reads as
+            // a broken screen rather than a locked one. Leave it uncovered.
+            guard !holes.isEmpty else { return }
+
+            var fog = PolygonAnnotation(
+                polygon: Polygon(outerRing: Self.worldRing, innerRings: holes)
+            )
+            fog.fillColor = ZoneStyle.fog
+
+            let fogManager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fog")
+            fogManager.slot = Self.overlaySlot
+            fogManager.annotations = [fog]
+            zoneFogManager = fogManager
+        }
+
+        /// Shades every locked zone as its own dark block with a soft boundary,
+        /// so the areas still to be unlocked are visible as regions.
+        private func installLockedZones(
+            mapView: MapboxMaps.MapView,
+            rings: [[CLLocationCoordinate2D]]
+        ) {
             guard !rings.isEmpty else { return }
 
             var fills: [PolygonAnnotation] = []

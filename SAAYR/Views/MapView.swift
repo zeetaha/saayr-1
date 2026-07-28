@@ -55,13 +55,20 @@ struct MapView: View {
     @State private var lastAutoCenter: CLLocationCoordinate2D?
 
     private let fraudStore = FraudEvidenceStore()
-    
+
+    /// Merchants the player is allowed to see: only those inside an unlocked
+    /// zone. Everything else sits on ground the map has blacked out, so a pin
+    /// there would point at somewhere they can't go.
+    private var visibleLocations: [NearbyLocationResponse] {
+        ZoneVisibility.inUnlockedZones(locations, zones: fogZones)
+    }
+
     var body: some View {
         ZStack {
             
             // MARK: Map (Mapbox)
             MapboxMapContainer(
-                locations: $locations,
+                locations: visibleLocations,
                 selectedLocation: $selectedLocation,
                 focusOn: $focusOn,
                 merchantPolygon: selectedLocation?.boundary_polygon,
@@ -94,12 +101,14 @@ struct MapView: View {
             WeatherOverlayView(condition: weatherManager.condition)
             
             // MARK: HeaderCard
-            if !locations.isEmpty && !showSuccessAlert && !showAlert{
+            // Counts what's actually pinned, so the header can't claim more
+            // merchants than the map is showing.
+            if !visibleLocations.isEmpty && !showSuccessAlert && !showAlert{
                 VStack {
-                    HeaderCard(nearbyCount: locations.count, weatherData: weatherManager.data)
+                    HeaderCard(nearbyCount: visibleLocations.count, weatherData: weatherManager.data)
                     Spacer()
                 }
-                .animation(.easeIn, value: locations.count)
+                .animation(.easeIn, value: visibleLocations.count)
             }
             
             // MARK: Success Banner
