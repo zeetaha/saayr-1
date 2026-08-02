@@ -19,6 +19,9 @@ struct MapView: View {
     @State private var showUnlockPopup = false
 
     @State private var lastFetchCenter: CLLocationCoordinate2D?
+    /// Radius the last nearby fetch covered, so zooming out past it can pull in
+    /// the merchants the wider view now exposes.
+    @State private var lastFetchRadiusKM: Int = 0
 
     // Mapbox camera control
     @State private var focusOn: MapCameraFocus?
@@ -29,6 +32,8 @@ struct MapView: View {
 
     /// Latest camera zoom, so the +/- buttons step from wherever the user is.
     @State private var currentZoom: Double = 15
+    /// Zoom the last diagnostic line was printed at (DEBUG logging only).
+    @State private var lastLoggedZoom: Double = .nan
 
     private static let minZoom: Double = 3
     private static let maxZoom: Double = 20
@@ -84,7 +89,10 @@ struct MapView: View {
                         latDelta: cameraState.north - cameraState.south,
                         lngDelta: cameraState.east - cameraState.west
                     )
-                    // Trigger nearby fetch when dragged far enough
+                    logMapDiagnostics(zoom: cameraState.zoom)
+                    // Widen the merchant fetch when the view grows, then trigger
+                    // a nearby fetch if the camera was dragged far enough.
+                    handleZoomChange()
                     handleMapDrag(cameraState.center)
                 },
                 onTapLocation: { location in
@@ -310,6 +318,47 @@ struct MapView: View {
         return ""
     }
 
+    /// Prints how many merchants are loaded versus actually pinned as the zoom
+    /// changes, so a "pins vanished" report can be pinned on the data (the count
+    /// drops) or on the map's own culling (the count holds while pins go).
+    /// Throttled to half a zoom level — the camera callback fires per frame.
+    private func logMapDiagnostics(zoom: Double) {
+        #if DEBUG
+        guard lastLoggedZoom.isNaN || abs(zoom - lastLoggedZoom) >= 0.5 else { return }
+        lastLoggedZoom = zoom
+        print(String(
+            format: "🗺️ zoom %.1f — %d fetched, %d pinned, %d zones, radius %dkm",
+            zoom, locations.count, visibleLocations.count, fogZones.count, fetchRadiusKM
+        ))
+        #endif
+    }
+
+    /// Radius to ask the API for: whatever the camera can currently see, so a
+    /// zoomed-out view is populated with merchants instead of only the ones
+    /// within walking distance of the last fetch centre.
+    private var fetchRadiusKM: Int {
+        let latKM = visibleRegion.latDelta * 111.0
+        let lngKM = visibleRegion.lngDelta * 111.0 * cos(visibleRegion.centerLat * .pi / 180)
+        let halfSpan = max(latKM, lngKM) / 2
+        return Int(min(max(halfSpan.rounded(.up), 5), 50))
+    }
+
+    /// Zooming out doesn't move the centre, so `handleMapDrag` never fires for
+    /// it — but the view can now show far more ground than the last fetch
+    /// covered. Refetch once the visible radius has meaningfully outgrown it.
+    private func handleZoomChange() {
+        let radius = fetchRadiusKM
+        guard Double(radius) > Double(max(lastFetchRadiusKM, 1)) * 1.5 else { return }
+
+        scheduleNearbyFetch(
+            CLLocationCoordinate2D(
+                latitude: visibleRegion.centerLat,
+                longitude: visibleRegion.centerLng
+            ),
+            ignoringDistance: true
+        )
+    }
+
     private func handleMapDrag(_ newCenter: CLLocationCoordinate2D) {
         guard let lastCenter = lastFetchCenter else {
             scheduleNearbyFetch(newCenter)
@@ -398,17 +447,26 @@ struct MapView: View {
 
     private func fetchNearby(_ coordinate: CLLocationCoordinate2D) {
         lastFetchCenter = coordinate
+        let radiusKM = fetchRadiusKM
+        lastFetchRadiusKM = radiusKM
 
         LocationAPI.shared.fetchNearby(
             latitude: coordinate.latitude,
-            longitude: coordinate.longitude
+            longitude: coordinate.longitude,
+            radiusKM: radiusKM
         ) { newItems, unlockInfo in
-            var seenKeys = Set<String>()
-            let refreshed = newItems.filter { item in
-                let inserted = seenKeys.insert(item.uniqueKey).inserted
-                return inserted
+            // Merge rather than replace. Each fetch only covers a circle around
+            // one centre, so replacing wiped every pin outside it — panning at a
+            // wide zoom (where a small drag is tens of km) emptied the map.
+            // Merchants already on screen stay put; a repeat of one just
+            // refreshes it with the newer copy.
+            var byKey: [String: NearbyLocationResponse] = [:]
+            var order: [String] = []
+            for item in locations + newItems {
+                if byKey[item.uniqueKey] == nil { order.append(item.uniqueKey) }
+                byKey[item.uniqueKey] = item
             }
-            locations = refreshed
+            locations = order.compactMap { byKey[$0] }
 
             if let unlock = unlockInfo {
                 fetchFogZones()
@@ -462,23 +520,32 @@ struct MapView: View {
         }
     }
 
-    private func scheduleNearbyFetch(_ coordinate: CLLocationCoordinate2D) {
-        guard shouldFetchNearby(for: coordinate) else { return }
+    private func scheduleNearbyFetch(
+        _ coordinate: CLLocationCoordinate2D,
+        ignoringDistance: Bool = false
+    ) {
+        guard shouldFetchNearby(for: coordinate, ignoringDistance: ignoringDistance) else { return }
 
         nearbyFetchWorkItem?.cancel()
         let workItem = DispatchWorkItem { [coordinate] in
-            performNearbyFetch(coordinate)
+            performNearbyFetch(coordinate, ignoringDistance: ignoringDistance)
         }
         nearbyFetchWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.75, execute: workItem)
     }
 
-    private func shouldFetchNearby(for coordinate: CLLocationCoordinate2D) -> Bool {
+    /// `ignoringDistance` is for zoom-driven fetches: the centre hasn't moved,
+    /// but the area on screen has grown, so the usual "moved 5 km" gate would
+    /// block a refetch that is genuinely needed.
+    private func shouldFetchNearby(
+        for coordinate: CLLocationCoordinate2D,
+        ignoringDistance: Bool = false
+    ) -> Bool {
         if isDwelling {
             return false
         }
 
-        if let lastCenter = lastFetchCenter {
+        if let lastCenter = lastFetchCenter, !ignoringDistance {
             let oldLocation = CLLocation(latitude: lastCenter.latitude, longitude: lastCenter.longitude)
             let newLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
             let distance = oldLocation.distance(from: newLocation)
@@ -495,8 +562,11 @@ struct MapView: View {
         return true
     }
 
-    private func performNearbyFetch(_ coordinate: CLLocationCoordinate2D) {
-        guard shouldFetchNearby(for: coordinate) else { return }
+    private func performNearbyFetch(
+        _ coordinate: CLLocationCoordinate2D,
+        ignoringDistance: Bool = false
+    ) {
+        guard shouldFetchNearby(for: coordinate, ignoringDistance: ignoringDistance) else { return }
         lastNearbyFetchDate = Date()
         lastFetchCenter = coordinate
         fetchNearby(coordinate)

@@ -262,10 +262,24 @@ struct MapboxMapContainer: UIViewRepresentable {
                     )
                 )
 
+                // Every knob Mapbox can use to hide a marker is pinned open here,
+                // so a pin only ever leaves the screen by being panned off it.
+                // `allowOverlap` is the one that bites when zooming out: markers
+                // that were spread apart start colliding as the view widens, and
+                // the default behaviour is to hide the ones that collide rather
+                // than shift them. `minZoom`/`maxZoom` are stated rather than
+                // left to the defaults so no zoom range can cull them either.
                 let options = ViewAnnotationOptions(
-                    geometry: point,
-                    allowOverlap: false,
-                    anchor: .center
+                    annotatedFeature: .geometry(point),
+                    width: 60,
+                    height: 72,
+                    allowOverlap: true,
+                    allowOverlapWithPuck: true,
+                    visible: true,
+                    variableAnchors: .center,
+                    ignoreCameraPadding: true,
+                    minZoom: 0,
+                    maxZoom: 22
                 )
 
                 try? mapView.viewAnnotations.add(view, options: options)
