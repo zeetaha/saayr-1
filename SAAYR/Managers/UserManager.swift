@@ -10,6 +10,7 @@ class UserManager: ObservableObject {
     
     // MARK: - Published properties
     @Published var leaderboardUsers: [LeaderboardUser] = []
+    @Published var leaderboardNextResetAt: Date? = nil
         
         
     @Published var userData: UserData = UserData(
@@ -60,6 +61,27 @@ class UserManager: ObservableObject {
         }
     }
 
+    // Handles both "2026-08-10T00:00:00Z" and Python's isoformat() without a timezone (assumed UTC)
+    static func parseISODate(_ string: String?) -> Date? {
+        guard let string = string, !string.isEmpty else { return nil }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: string) { return date }
+
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: string) { return date }
+
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            fmt.dateFormat = format
+            if let date = fmt.date(from: string) { return date }
+        }
+        return nil
+    }
+
         // MARK: - API Fetching
     // MARK: - Fetch All User Data
     func fetchAllUserData() {
@@ -83,6 +105,11 @@ class UserManager: ObservableObject {
                 guard let leaderboardResponse = leaderboardResponse else { return }
 
                 self.updateLeaderboard(from: leaderboardResponse.leaderboard)
+
+                let resetDate = Self.parseISODate(leaderboardResponse.next_reset_at)
+                DispatchQueue.main.async {
+                    self.leaderboardNextResetAt = resetDate
+                }
             }
 
             self.fetchMyMatch()

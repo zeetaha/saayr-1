@@ -83,6 +83,7 @@ struct LeaderboardResponse: Decodable {
     let my_points: Int?
     let leaderboard: [LeaderboardEntry]
     let total_entries: Int?
+    let next_reset_at: String?
 }
 
 struct MyMatchResponse: Decodable {

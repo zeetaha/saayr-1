@@ -188,10 +188,22 @@ struct HomeView: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.black)
                 Spacer()
-                NavigationLink(destination: LeaderboardFullView()) {
-                    Text(languageManager.currentLanguage == .english ? "View All" : "عرض الكل")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.blue)
+                VStack(alignment: .trailing, spacing: 2) {
+                    NavigationLink(destination: LeaderboardFullView()) {
+                        Text(languageManager.currentLanguage == .english ? "View All" : "عرض الكل")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.blue)
+                    }
+
+                    if let resetAt = userManager.leaderboardNextResetAt {
+                        CountdownText(
+                            deadline: resetAt,
+                            isEnglish: languageManager.currentLanguage == .english,
+                            color: .gray,
+                            urgentColor: .orange
+                        )
+                        .font(.system(size: 11, weight: .medium))
+                    }
                 }
             }
 

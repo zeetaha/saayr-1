@@ -11,7 +11,16 @@ struct ChallengeGroup: Decodable {
     let completed: Int
     let total: Int
     let expires : String?
+    let expires_at: String?      // ISO timestamp when the API provides one
     let challenges: [APIChallenge]
+
+    /// Deadline to count down to: the ISO timestamp if present, otherwise derived
+    /// from the pre-formatted `expires` string ("Reset in 8h", "20h remaining", …).
+    /// Resolve this once when the response arrives — a duration-derived deadline is
+    /// anchored to "now", so recomputing it would keep pushing the countdown forward.
+    func resolveExpiryDate() -> Date? {
+        CountdownFormat.deadline(fromISO: expires_at, orDurationText: expires)
+    }
 }
 
 struct APIChallenge: Decodable, Identifiable {
@@ -45,6 +54,8 @@ struct ChallengesView: View {
     @State private var errorMessage: String? = nil
     @State private var dailyExpanded = false
     @State private var weeklyExpanded = false
+    @State private var dailyDeadline: Date? = nil
+    @State private var weeklyDeadline: Date? = nil
 
     private let dailyColor  = Color(hex: "#7C3AED")
     private let weeklyColor = Color(hex: "#F97316")
@@ -80,12 +91,14 @@ struct ChallengesView: View {
                                 title: "Daily Challenges",
                                 group: data.daily,
                                 accentColor: dailyColor,
+                                deadline: dailyDeadline,
                                 isExpanded: $dailyExpanded
                             )
                             challengeSection(
                                 title: "Weekly Challenges",
                                 group: data.weekly,
                                 accentColor: weeklyColor,
+                                deadline: weeklyDeadline,
                                 isExpanded: $weeklyExpanded
                             )
                         }
@@ -175,6 +188,7 @@ struct ChallengesView: View {
     @ViewBuilder
     private func challengeSection(title: String,
                                   group: ChallengeGroup, accentColor: Color,
+                                  deadline: Date?,
                                   isExpanded: Binding<Bool>) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             // Section header
@@ -186,7 +200,25 @@ struct ChallengesView: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.black)
                 Spacer()
-                if let expires = group.expires {
+                if let deadline = deadline {
+                    CountdownText(
+                        deadline: deadline,
+                        isEnglish: languageManager.currentLanguage == .english,
+                        color: accentColor,
+                        urgentColor: Color(hex: "#DC2626")
+                    )
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(
+                                (CountdownFormat.isUrgent(deadline: deadline)
+                                    ? Color(hex: "#DC2626") : accentColor).opacity(0.4),
+                                lineWidth: 1
+                            )
+                    )
+                } else if let expires = group.expires {
                     Text(expires)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(accentColor)
@@ -253,6 +285,7 @@ struct ChallengesView: View {
     private func loadChallenges() {
         if let mock = previewData {
             response = mock
+            anchorDeadlines(from: mock)
             isLoading = false
             return
         }
@@ -264,11 +297,18 @@ struct ChallengesView: View {
                 switch result {
                 case .success(let data):
                     response = data
+                    anchorDeadlines(from: data)
                 case .failure:
                     errorMessage = "Failed to load challenges.\nPlease try again."
                 }
             }
         }
+    }
+
+    // Resolve the reset deadlines once per response so the countdowns don't drift.
+    private func anchorDeadlines(from data: ChallengesResponse) {
+        dailyDeadline = data.daily.resolveExpiryDate()
+        weeklyDeadline = data.weekly.resolveExpiryDate()
     }
 
 }
@@ -392,7 +432,7 @@ private struct ChallengeCard: View {
 }
 
 #Preview {
-    let mockDaily = ChallengeGroup(completed: 1, total: 3, expires: "Reset in 8h", challenges: [
+    let mockDaily = ChallengeGroup(completed: 1, total: 3, expires: "Reset in 8h", expires_at: nil, challenges: [
         APIChallenge(mission_id: 1, title: "Check in 3 locations",
                      description: "Visit and check in at 3 different spots",
                      xp_reward: 100, target_count: 3, current_count: 2,
@@ -406,7 +446,7 @@ private struct ChallengeCard: View {
                      xp_reward: 75, target_count: 1, current_count: 0,
                      status: "not_started", progress_percentage: 0, completed_at: nil),
     ])
-    let mockWeekly = ChallengeGroup(completed: 0, total: 3, expires: "Reset in 3d ", challenges: [
+    let mockWeekly = ChallengeGroup(completed: 0, total: 3, expires: "Reset in 3d ", expires_at: nil, challenges: [
         APIChallenge(mission_id: 4, title: "Reach Level 5",
                      description: "Level up your pet to level 5",
                      xp_reward: 500, target_count: 5, current_count: 2,
