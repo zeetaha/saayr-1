@@ -60,8 +60,23 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
     let is_landmark: Bool?
     let is_discovered: Bool?
     let discovered_at: String?
+    let description_ar: String?
+    /// Emoji the backend picks for the pin, e.g. "📍".
+    let icon: String?
 
     // MARK: - Helpers
+
+    /// Description in the player's language, falling back to the other one
+    /// rather than showing nothing — a landmark with only an Arabic write-up
+    /// should still say something to an English player.
+    func localizedDescription(isEnglish: Bool) -> String? {
+        let preferred = isEnglish ? description : description_ar
+        let fallback  = isEnglish ? description_ar : description
+        let chosen = [preferred, fallback]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        return chosen
+    }
 
     /// Landmarks are the pins that stay a mystery until the player stands in
     /// them. The server flag wins; `type` is the fallback until it ships.
@@ -132,6 +147,8 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
         case is_landmark
         case is_discovered
         case discovered_at
+        case description_ar
+        case icon
     }
 }
 
@@ -175,10 +192,52 @@ struct ZoneUnlockInfo: Decodable {
     let center_lng: String
 }
 
+// MARK: - Landmark detail
+
+/// A landmark this player has already found.
+///
+/// The detail lives here rather than on the location itself: an undiscovered
+/// landmark comes back with `description` nulled out, so the payload can't be
+/// read to spoil what a mystery pin is. Once discovered, the same landmark
+/// appears in `discovered_landmarks` with everything filled in.
+struct DiscoveredLandmark: Decodable, Sendable, Hashable {
+    let landmark_id: Int
+    let name: String?
+    let name_ar: String?
+    let description: String?
+    let description_ar: String?
+    let icon: String?
+    let xp_earned: Int?
+
+    func localizedName(isEnglish: Bool) -> String? {
+        Self.pick(isEnglish ? name : name_ar, isEnglish ? name_ar : name)
+    }
+
+    func localizedDescription(isEnglish: Bool) -> String? {
+        Self.pick(isEnglish ? description : description_ar,
+                  isEnglish ? description_ar : description)
+    }
+
+    /// First of the two that has actual text in it. The backend sends `"\n"`
+    /// and empty strings for unwritten copy, which would otherwise render as a
+    /// blank paragraph.
+    private static func pick(_ preferred: String?, _ fallback: String?) -> String? {
+        [preferred, fallback]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+}
+
 // New response envelope for v1.0.7+ nearby
 struct NearbyAPIResponse: Decodable {
     let locations: [NearbyLocationResponse]
     let newly_unlocked_zone: ZoneUnlockInfo?
+    /// Every landmark the player has found, with the detail to show for it.
+    let discovered_landmarks: [DiscoveredLandmark]?
+    /// Set on the one response that crosses the geofence, if the backend is
+    /// driving discovery. Decoded so it's available; the reveal is currently
+    /// still triggered client-side.
+    let newly_discovered_landmark: DiscoveredLandmark?
 }
 
 
@@ -208,6 +267,9 @@ final class LocationAPI {
     
     // MARK: - Caching & Debouncing
     private var cachedNearby: [NearbyLocationResponse] = []
+    /// Kept alongside the pins so a failed refresh doesn't blank the detail on
+    /// a landmark card the player already has open.
+    private var cachedLandmarks: [DiscoveredLandmark] = []
     private var cacheTimestamp: Date? = nil
     private let cacheExpiry: TimeInterval = 600 // 10 minutes
     private let debounceInterval: TimeInterval = 1.0 // 1 second
@@ -221,7 +283,7 @@ final class LocationAPI {
         latitude: Double,
         longitude: Double,
         radiusKM: Int = 5,
-        completion: @escaping @Sendable ([NearbyLocationResponse], ZoneUnlockInfo?) -> Void
+        completion: @escaping @Sendable ([NearbyLocationResponse], ZoneUnlockInfo?, [DiscoveredLandmark]) -> Void
     ) {
         // Debounce rapid requests
         if let lastFetch = lastFetchTime,
@@ -248,29 +310,34 @@ final class LocationAPI {
                         if let envelope = try? JSONDecoder().decode(NearbyAPIResponse.self, from: data) {
                             DispatchQueue.main.async {
                                 self.cachedNearby = envelope.locations
+                                self.cachedLandmarks = envelope.discovered_landmarks ?? []
                                 self.cacheTimestamp = Date()
-                                completion(envelope.locations, envelope.newly_unlocked_zone)
+                                completion(
+                                    envelope.locations,
+                                    envelope.newly_unlocked_zone,
+                                    envelope.discovered_landmarks ?? []
+                                )
                             }
                         } else if let legacy = try? JSONDecoder().decode([NearbyLocationResponse].self, from: data) {
                             DispatchQueue.main.async {
                                 self.cachedNearby = legacy
                                 self.cacheTimestamp = Date()
-                                completion(legacy, nil)
+                                completion(legacy, nil, [])
                             }
                         } else {
                             print("❌ Decoding error: unrecognised nearby response shape")
-                            DispatchQueue.main.async { completion(self.cachedNearby, nil) }
+                            DispatchQueue.main.async { completion(self.cachedNearby, nil, self.cachedLandmarks) }
                         }
                     } catch {
                         print("❌ JSON decode error:", error)
-                        DispatchQueue.main.async { completion(self.cachedNearby, nil) }
+                        DispatchQueue.main.async { completion(self.cachedNearby, nil, self.cachedLandmarks) }
                     }
-                    
+
                 case .failure(let error):
                     print("❌ API error:", error.localizedDescription)
                     DispatchQueue.main.async {
                         // Return cached data if available, even if stale
-                        completion(self.cachedNearby, nil)
+                        completion(self.cachedNearby, nil, self.cachedLandmarks)
                     }
                 }
             }
@@ -279,6 +346,7 @@ final class LocationAPI {
     
     func clearNearbyCache() {
         cachedNearby = []
+        cachedLandmarks = []
         cacheTimestamp = nil
     }
     

@@ -313,9 +313,17 @@ final class LandmarkDiscoveryService: ObservableObject {
         }
     }
 
-    /// Adopts `is_discovered` when the nearby payload starts carrying it.
-    func adoptServerState(from locations: [NearbyLocationResponse]) {
-        let discovered = locations.filter { $0.is_discovered == true }.map(\.id)
+    /// Adopts the server's view of what this player has found: the per-location
+    /// `is_discovered` flag, plus the `discovered_landmarks` list — which is the
+    /// authoritative one, since it's populated even while `is_discovered` still
+    /// comes back null on the location itself.
+    func adoptServerState(
+        from locations: [NearbyLocationResponse],
+        discoveredLandmarks: [DiscoveredLandmark] = []
+    ) {
+        let flagged = locations.filter { $0.is_discovered == true }.map(\.id)
+        let listed = discoveredLandmarks.map(\.landmark_id)
+        let discovered = Array(Set(flagged + listed))
         guard !discovered.isEmpty else { return }
 
         store.merge(serverIDs: discovered)
@@ -336,6 +344,14 @@ final class LandmarkDiscoveryService: ObservableObject {
 
     func lockedKeys(in locations: [NearbyLocationResponse]) -> Set<String> {
         Set(locations.filter(isLocked).map(\.uniqueKey))
+    }
+
+    /// When this landmark was found. The server's timestamp wins — it's the one
+    /// that survives a reinstall — with the local record covering discoveries
+    /// made offline, or made before the backend started sending the field.
+    func discoveryDate(for location: NearbyLocationResponse) -> Date? {
+        UserManager.parseISODate(location.discovered_at)
+            ?? store.discoveredAt(location.id)
     }
 
     // MARK: Detection

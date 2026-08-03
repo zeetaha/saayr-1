@@ -14,6 +14,10 @@ struct MapView: View {
 
     @State private var locations: [NearbyLocationResponse] = []
     @State private var selectedLocation: NearbyLocationResponse?
+    /// Detail for landmarks this player has found, keyed by landmark id. Comes
+    /// from `discovered_landmarks` in the nearby response — the location object
+    /// itself carries no description until the landmark is discovered.
+    @State private var landmarkDetails: [Int: DiscoveredLandmark] = [:]
 
     // Fog of War
     @State private var fogZones: [Zone] = []
@@ -317,6 +321,16 @@ struct MapView: View {
                         isEnglish: languageManager.currentLanguage == .english,
                         onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
                     )
+                } else if location.isLandmark {
+                    // Discovered landmark: its story, and no check-in button —
+                    // a landmark is found once, not visited repeatedly.
+                    DiscoveredLandmarkCard(
+                        landmark: location,
+                        detail: landmarkDetails[location.id],
+                        discoveredAt: discoveries.discoveryDate(for: location),
+                        isEnglish: languageManager.currentLanguage == .english,
+                        onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
+                    )
                 } else {
                     BottomCheckInCard(
                         merchant: location.asMerchant,
@@ -588,7 +602,7 @@ struct MapView: View {
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             radiusKM: radiusKM
-        ) { newItems, unlockInfo in
+        ) { newItems, unlockInfo, discoveredLandmarks in
             // Merge rather than replace. Each fetch only covers a circle around
             // one centre, so replacing wiped every pin outside it — panning at a
             // wide zoom (where a small drag is tens of km) emptied the map.
@@ -602,10 +616,16 @@ struct MapView: View {
             }
             locations = order.compactMap { byKey[$0] }
 
-            // Once the backend starts sending `is_discovered`, it wins over the
-            // local record — a landmark revealed on another device shouldn't
-            // still read as a mystery here.
-            discoveries.adoptServerState(from: newItems)
+            // Merged for the same reason as the pins: this fetch only describes
+            // the landmarks near one centre, and dropping the rest would blank
+            // the card of one the player walks back to.
+            for landmark in discoveredLandmarks {
+                landmarkDetails[landmark.landmark_id] = landmark
+            }
+
+            // The server's record wins over the local one — a landmark revealed
+            // on another device shouldn't still read as a mystery here.
+            discoveries.adoptServerState(from: newItems, discoveredLandmarks: discoveredLandmarks)
 
             if let unlock = unlockInfo {
                 fetchFogZones()
@@ -714,9 +734,10 @@ struct MapView: View {
     // MARK: - Check-In Flow (Anti-Cheat)
 
     private func beginCheckIn(_ location: NearbyLocationResponse) {
-        // Undiscovered landmarks aren't checkable-in — walking into one is what
-        // reveals it, and only then does it behave like any other location.
-        guard !discoveries.isLocked(location) else { return }
+        // Landmarks aren't checked into at all: undiscovered ones are revealed
+        // by walking in, and discovered ones are done with. No card offers the
+        // button, so this is belt-and-braces against a future caller.
+        guard !location.isLandmark else { return }
 
         guard locationManager.currentLocation != nil else {
             errorMessage = locationUnavailableMessage
@@ -899,7 +920,7 @@ struct MapView: View {
         LocationAPI.shared.fetchNearby(
             latitude: coord.latitude,
             longitude: coord.longitude
-        ) { items, _ in
+        ) { items, _, _ in
             guard let updated = items.first(where: { $0.id == locationId }),
                   updated.king_user_id != UserModel.shared.user?.id,
                   updated.king_falcon_name != nil

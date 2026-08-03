@@ -156,6 +156,135 @@ struct MysteryLandmarkCard: View {
     }
 }
 
+// MARK: - Discovered landmark card
+
+/// What a landmark shows once it's been found. Deliberately has no check-in
+/// button: a landmark is discovered by walking into it, once, and there is
+/// nothing left to do at it afterwards — so the card is a plaque, not an
+/// action.
+struct DiscoveredLandmarkCard: View {
+
+    let landmark: NearbyLocationResponse
+    /// Detail from `discovered_landmarks`. Absent for a landmark the player
+    /// hasn't found, and for one the server hasn't listed yet.
+    let detail: DiscoveredLandmark?
+    /// When the player found it. Nil for a landmark discovered before the app
+    /// recorded timestamps — the seal then stands on its own.
+    let discoveredAt: Date?
+    let isEnglish: Bool
+    var onClose: (() -> Void)? = nil
+
+    /// The list entry wins: the location's own copy is nulled out by the
+    /// backend until the landmark is discovered.
+    private var title: String {
+        detail?.localizedName(isEnglish: isEnglish) ?? landmark.name
+    }
+
+    /// Not rendered for now. The plumbing behind it — `discovered_landmarks`,
+    /// the language fallback — is still live, so putting the paragraph back is
+    /// a matter of dropping a `Text(description)` into the body.
+    private var description: String? {
+        detail?.localizedDescription(isEnglish: isEnglish)
+            ?? landmark.localizedDescription(isEnglish: isEnglish)
+    }
+
+    private var icon: String {
+        detail?.icon ?? landmark.icon ?? "🏛️"
+    }
+
+    /// Only shown when the backend actually awarded something — a landmark
+    /// worth 0 XP shouldn't advertise it.
+    private var xpEarned: Int? {
+        guard let earned = detail?.xp_earned, earned > 0 else { return nil }
+        return earned
+    }
+
+    /// "Today" and "Yesterday" for the recent ones, a plain date beyond that —
+    /// the exact minute of a discovery stops mattering within a day or two,
+    /// and the relative form reads better next to the seal.
+    private var discoveredAtText: String? {
+        guard let discoveredAt else { return nil }
+
+        let calendar = Calendar.current
+        if calendar.isDateInToday(discoveredAt) {
+            return isEnglish ? "Discovered today" : "اكتُشف اليوم"
+        }
+        if calendar.isDateInYesterday(discoveredAt) {
+            return isEnglish ? "Discovered yesterday" : "اكتُشف أمس"
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: isEnglish ? "en" : "ar")
+        formatter.dateFormat = calendar.isDate(discoveredAt, equalTo: Date(), toGranularity: .year)
+            ? "d MMM"
+            : "d MMM yyyy"
+        let day = formatter.string(from: discoveredAt)
+        return isEnglish ? "Discovered \(day)" : "اكتُشف \(day)"
+    }
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            VStack(spacing: 14) {
+                HStack(spacing: 16) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(MysteryStyle.bright.opacity(0.12))
+                            .frame(width: 56, height: 56)
+                        Text(icon).font(.system(size: 30))
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.black)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 12))
+                            // The dated form already says "Discovered", so the
+                            // two never double up.
+                            Text(discoveredAtText ?? (isEnglish ? "Discovered" : "تم اكتشافه"))
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(MysteryStyle.bright)
+                    }
+
+                    // Leaves room for the close button in the corner.
+                    Spacer(minLength: 34)
+                }
+
+                if let xpEarned {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(isEnglish ? "+\(xpEarned) XP earned" : "+\(xpEarned) نقطة مكتسبة")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundColor(MysteryStyle.goldXP)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(MysteryStyle.goldXP.opacity(0.08))
+                    .cornerRadius(12)
+                }
+            }
+            .padding(20)
+            .background(Color.white)
+            .cornerRadius(24)
+            .shadow(color: .black.opacity(0.15), radius: 16, x: 0, y: -4)
+            .overlay(alignment: .topTrailing) {
+                if let onClose {
+                    CardCloseButton(action: onClose)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+        }
+    }
+}
+
 // MARK: - Reveal
 
 /// The payoff. Name, details and XP, over the same fog-lift treatment the zone

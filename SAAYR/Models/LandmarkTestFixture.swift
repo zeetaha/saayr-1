@@ -61,7 +61,9 @@ enum LandmarkTestFixture {
             boundary_polygon: nil,
             is_landmark: true,
             is_discovered: nil,
-            discovered_at: nil
+            discovered_at: nil,
+            description_ar: "قلعة من الطين في قلب الرياض القديمة، حيث بدأت قصة المدينة الحديثة عام ١٩٠٢.",
+            icon: "🏰"
         )
     }
 }
