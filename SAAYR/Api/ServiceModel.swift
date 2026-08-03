@@ -23,7 +23,19 @@ class ServiceModel {
     private lazy var session: Session = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
+
+        #if DEBUG
+        // Every request and response goes to the console in debug builds.
+        // See `APILogger` for the switches (silence it, show the bearer token,
+        // change how much of a body is printed).
+        return Session(
+            configuration: config,
+            interceptor: TokenInterceptor(),
+            eventMonitors: [APILogger()]
+        )
+        #else
         return Session(configuration: config, interceptor: TokenInterceptor())
+        #endif
     }()
 
     private init() { }
@@ -463,7 +475,6 @@ class ServiceModel {
         // Prefer Keychain‑stored token (refreshed, always current)
         if let token = TokenManager.shared.accessToken ?? UserModel.shared.user?.accessToken {
             headers["Authorization"] = "Bearer \(token)"
-            print("Bearer \(token)")
         }
         headers["Language-Code"] = UserModel.shared.languageCode
         headers["App-Version"]   = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"

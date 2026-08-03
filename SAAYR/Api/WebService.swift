@@ -51,6 +51,15 @@ class WebService {
     static var zones           = baseUrl + "zones/"
     static var zonesMyExplored = baseUrl + "zones/my-explored"
 
+    // MARK: - Landmark discovery
+    /// Records that the player physically reached a landmark. Not live yet —
+    /// `LandmarkDiscoveryService` treats a failure here as "sync later", so
+    /// discoveries survive locally until the endpoint answers.
+    static var landmarkDiscover    = baseUrl + "landmarks/discover"
+    /// Everything this player has already revealed, for a fresh install or a
+    /// second device.
+    static var landmarkDiscoveries = baseUrl + "landmarks/my-discoveries"
+
     // MARK: - User
     static var profile       = baseUrl + "user/profile"
     static var dashboard     = baseUrl + "user/dashboard"

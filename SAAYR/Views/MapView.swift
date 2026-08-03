@@ -9,6 +9,8 @@ struct MapView: View {
 
     @StateObject private var locationManager = FilteredLocationManager()
     @StateObject private var weatherManager = WeatherManager()
+    /// Which landmarks are still a mystery, and the reveal when one is entered.
+    @StateObject private var discoveries = LandmarkDiscoveryService()
 
     @State private var locations: [NearbyLocationResponse] = []
     @State private var selectedLocation: NearbyLocationResponse?
@@ -34,6 +36,11 @@ struct MapView: View {
     @State private var currentZoom: Double = 15
     /// Zoom the last diagnostic line was printed at (DEBUG logging only).
     @State private var lastLoggedZoom: Double = .nan
+
+    #if DEBUG
+    /// Where the test landmark was planted. Set once, from the first fix.
+    @State private var debugLandmarkAnchor: CLLocationCoordinate2D?
+    #endif
 
     private static let minZoom: Double = 3
     private static let maxZoom: Double = 20
@@ -65,7 +72,38 @@ struct MapView: View {
     /// zone. Everything else sits on ground the map has blacked out, so a pin
     /// there would point at somewhere they can't go.
     private var visibleLocations: [NearbyLocationResponse] {
-        ZoneVisibility.inUnlockedZones(locations, zones: fogZones)
+        let real = ZoneVisibility.inUnlockedZones(locations, zones: fogZones)
+
+        #if DEBUG
+        // Appended after the zone filter on purpose: the test landmark should
+        // show up whether or not the surrounding zone is unlocked.
+        if let fixture = debugLandmark { return real + [fixture] }
+        #endif
+
+        return real
+    }
+
+    #if DEBUG
+    /// The fake landmark, planted once near wherever the player first appears
+    /// so it doesn't drift around as new fixes arrive.
+    private var debugLandmark: NearbyLocationResponse? {
+        guard LandmarkTestFixture.isEnabled, let anchor = debugLandmarkAnchor else { return nil }
+        return LandmarkTestFixture.landmark(near: anchor)
+    }
+    #endif
+
+    /// Whether the pin the player tapped is a landmark they haven't reached.
+    private var isSelectionLocked: Bool {
+        selectedLocation.map(discoveries.isLocked) ?? false
+    }
+
+    /// The area to walk into for the tapped mystery pin. Showing where it is
+    /// gives nothing away about what it is, and without it the pin is an
+    /// instruction with no target — landmarks without a boundary polygon get
+    /// their geofence circle drawn instead.
+    private var selectedMysteryArea: [PolygonPoint]? {
+        guard let location = selectedLocation, discoveries.isLocked(location) else { return nil }
+        return LandmarkGeofence.boundaryRing(of: location)
     }
 
     var body: some View {
@@ -76,7 +114,9 @@ struct MapView: View {
                 locations: visibleLocations,
                 selectedLocation: $selectedLocation,
                 focusOn: $focusOn,
-                merchantPolygon: selectedLocation?.boundary_polygon,
+                merchantPolygon: isSelectionLocked ? nil : selectedLocation?.boundary_polygon,
+                mysteryArea: selectedMysteryArea,
+                lockedLandmarkKeys: discoveries.lockedKeys(in: visibleLocations),
                 zones: fogZones,
                 isArabic: languageManager.currentLanguage == .arabic,
                 isCheckingIn: isDwelling,
@@ -222,6 +262,30 @@ struct MapView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                             .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
 
+                            #if DEBUG
+                            // Tap: reveal the nearest mystery pin without
+                            // walking to it. Long press: put every landmark
+                            // back to undiscovered so it can be run again.
+                            if LandmarkTestFixture.isEnabled {
+                                Button {
+                                    debugRevealNearestLandmark()
+                                } label: {
+                                    Image(systemName: "wand.and.stars")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(Color(hex: "#7C3AED"))
+                                        .frame(width: 48, height: 48)
+                                        .background(Color.white)
+                                        .clipShape(Circle())
+                                        .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
+                                }
+                                .simultaneousGesture(
+                                    LongPressGesture().onEnded { _ in
+                                        withAnimation { discoveries.debugResetDiscoveries() }
+                                    }
+                                )
+                            }
+                            #endif
+
                             // Recenter on the user
                             Button {
                                 recenterOnUser()
@@ -243,11 +307,23 @@ struct MapView: View {
 
             // MARK: Bottom Check-In
             if !isDwelling, let location = selectedLocation {
-                BottomCheckInCard(
-                    merchant: location.asMerchant,
-                    isLoading: isValidating
-                ) {
-                    beginCheckIn(location)
+                // A landmark that hasn't been reached shows nothing about
+                // itself — not even a check-in button, since reaching it is
+                // the whole interaction.
+                if discoveries.isLocked(location) {
+                    MysteryLandmarkCard(
+                        landmark: location,
+                        userLocation: cameraLocation?.coordinate,
+                        isEnglish: languageManager.currentLanguage == .english,
+                        onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
+                    )
+                } else {
+                    BottomCheckInCard(
+                        merchant: location.asMerchant,
+                        isLoading: isValidating,
+                        onCheckIn: { beginCheckIn(location) },
+                        onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
+                    )
                 }
             }
 
@@ -272,6 +348,23 @@ struct MapView: View {
                 .zIndex(100)
             }
 
+            // MARK: Landmark Reveal
+            if let reveal = discoveries.reveal {
+                LandmarkRevealPopup(
+                    reveal: reveal,
+                    isEnglish: languageManager.currentLanguage == .english
+                ) {
+                    withAnimation(.easeInOut) {
+                        // Leaves the now-discovered landmark selected, so the
+                        // check-in card it just became is right there.
+                        selectedLocation = reveal.landmark
+                        discoveries.dismissReveal()
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(110)
+            }
+
         }
         .onAppear {
             locationManager.requestPermission()
@@ -280,6 +373,23 @@ struct MapView: View {
             // updates directly for the already-authorized case.
             locationManager.startUpdating()
             fetchFogZones()
+
+            // Restores what this player has already revealed, then reconciles
+            // with the server: pulls its record, replays anything it never
+            // acknowledged.
+            discoveries.load()
+        }
+        // Discovery runs off the filtered fix, not the raw one: entering a
+        // landmark awards XP, so it has to clear the same anti-cheat bar as a
+        // check-in rather than trusting whatever the OS last reported.
+        .onReceive(locationManager.$currentLocation.compactMap { $0 }) { location in
+            withAnimation(.easeInOut) {
+                discoveries.evaluate(
+                    userLocation: location,
+                    isSimulated: locationManager.isSimulated,
+                    locations: visibleLocations
+                )
+            }
         }
         // Driven by the raw fix, not the filtered one: following the user and
         // listing nearby merchants shouldn't stall because a fix was too coarse
@@ -300,6 +410,10 @@ struct MapView: View {
                 moveToUser(location)
                 lastAutoCenter = coord
             }
+
+            #if DEBUG
+            if debugLandmarkAnchor == nil { debugLandmarkAnchor = coord }
+            #endif
 
             weatherManager.update(coordinate: coord)
             scheduleNearbyFetch(coord)
@@ -332,6 +446,26 @@ struct MapView: View {
         ))
         #endif
     }
+
+    #if DEBUG
+    /// Reveals the closest undiscovered landmark, so the reveal can be tested
+    /// without moving the device or the simulator's location.
+    private func debugRevealNearestLandmark() {
+        let anchor = cameraLocation?.coordinate ?? Self.riyadh
+        let locked = visibleLocations.filter(discoveries.isLocked)
+
+        guard let nearest = locked.min(by: {
+            LandmarkGeofence.distance(from: anchor, to: $0)
+                < LandmarkGeofence.distance(from: anchor, to: $1)
+        }) else {
+            errorMessage = "No undiscovered landmarks in view."
+            showAlert = true
+            return
+        }
+
+        withAnimation(.easeInOut) { discoveries.debugDiscover(nearest) }
+    }
+    #endif
 
     /// Radius to ask the API for: whatever the camera can currently see, so a
     /// zoomed-out view is populated with merchants instead of only the ones
@@ -468,6 +602,11 @@ struct MapView: View {
             }
             locations = order.compactMap { byKey[$0] }
 
+            // Once the backend starts sending `is_discovered`, it wins over the
+            // local record — a landmark revealed on another device shouldn't
+            // still read as a mystery here.
+            discoveries.adoptServerState(from: newItems)
+
             if let unlock = unlockInfo {
                 fetchFogZones()
                 pendingUnlock = unlock
@@ -575,6 +714,10 @@ struct MapView: View {
     // MARK: - Check-In Flow (Anti-Cheat)
 
     private func beginCheckIn(_ location: NearbyLocationResponse) {
+        // Undiscovered landmarks aren't checkable-in — walking into one is what
+        // reveals it, and only then does it behave like any other location.
+        guard !discoveries.isLocked(location) else { return }
+
         guard locationManager.currentLocation != nil else {
             errorMessage = locationUnavailableMessage
             showAlert = true
@@ -964,7 +1107,10 @@ struct BottomCheckInCard: View {
     let merchant: MerchantLocation
     var isLoading: Bool = false
     let onCheckIn: () -> Void
-    
+    /// Dismisses the card. Only clears the selection — tapping this pin again,
+    /// or any other, brings it straight back.
+    var onClose: (() -> Void)? = nil
+
     var body: some View {
         VStack {
             Spacer()
@@ -1053,14 +1199,38 @@ struct BottomCheckInCard: View {
                     .cornerRadius(16)
                 }
                 .disabled(!merchant.can_checkin || isLoading)
-                
+
             }
             .padding()
             .background(.ultraThinMaterial)
             .cornerRadius(24)
+            .overlay(alignment: .topTrailing) {
+                if let onClose {
+                    CardCloseButton(action: onClose)
+                }
+            }
             .padding(.horizontal)
             .padding(.bottom)
         }
+    }
+}
+
+// MARK: - Card Close Button
+
+/// The dismiss affordance shared by the check-in and mystery cards.
+struct CardCloseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.black.opacity(0.55))
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color.black.opacity(0.07)))
+        }
+        .padding(10)
+        .accessibilityLabel("Close")
     }
 }
 

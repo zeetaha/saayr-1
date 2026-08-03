@@ -33,6 +33,12 @@ struct MapboxMapContainer: UIViewRepresentable {
     @Binding var focusOn: MapCameraFocus?
 
     var merchantPolygon: [PolygonPoint]?
+    /// The area of a tapped-but-undiscovered landmark: shows where to walk to
+    /// without saying what's waiting there.
+    var mysteryArea: [PolygonPoint]?
+    /// `uniqueKey`s of landmarks this player hasn't discovered yet — drawn as
+    /// mystery pins instead of merchant markers.
+    var lockedLandmarkKeys: Set<String>
     var zones: [Zone]
     /// Picks `name_ar` over `name` for the zone labels.
     var isArabic: Bool
@@ -115,12 +121,18 @@ struct MapboxMapContainer: UIViewRepresentable {
         context.coordinator.syncAnnotations(
             mapView: mapView,
             locations: locations,
-            selectedKey: selectedLocation?.uniqueKey
+            selectedKey: selectedLocation?.uniqueKey,
+            lockedLandmarkKeys: lockedLandmarkKeys
         )
 
         context.coordinator.syncPolygon(
             mapView: mapView,
             polygon: merchantPolygon
+        )
+
+        context.coordinator.syncMysteryArea(
+            mapView: mapView,
+            polygon: mysteryArea
         )
 
         // ✅ SAFE focus handling
@@ -163,6 +175,11 @@ struct MapboxMapContainer: UIViewRepresentable {
         private var polygonManager: PolygonAnnotationManager?
         private var outlineManager: PolylineAnnotationManager?
         private var currentPolygonDigest: Int = -1
+
+        // Mystery landmark area state
+        private var mysteryFillManager: PolygonAnnotationManager?
+        private var mysteryOutlineManager: PolylineAnnotationManager?
+        private var currentMysteryDigest: Int = -1
 
         // Zone annotation state
         private var zoneFogManager: PolygonAnnotationManager?
@@ -229,6 +246,15 @@ struct MapboxMapContainer: UIViewRepresentable {
             static let lineWidth: Double = 3
         }
 
+        /// The area of an undiscovered landmark: the violet of the mystery pin,
+        /// so it reads as "walk in here to find out" rather than as a merchant
+        /// you could already check into.
+        private enum MysteryAreaStyle {
+            static let stroke = StyleColor(red: 124, green: 58, blue: 237, alpha: 0.95)
+            static let fill   = StyleColor(red: 124, green: 58, blue: 237, alpha: 0.16)
+            static let lineWidth: Double = 3
+        }
+
         init(parent: MapboxMapContainer) {
             self.parent = parent
         }
@@ -236,9 +262,14 @@ struct MapboxMapContainer: UIViewRepresentable {
         func syncAnnotations(
             mapView: MapboxMaps.MapView,
             locations: [NearbyLocationResponse],
-            selectedKey: String?
+            selectedKey: String?,
+            lockedLandmarkKeys: Set<String>
         ) {
-            let digest = locations.map(\.uniqueKey).joined(separator: "|").hashValue ^ (selectedKey?.hashValue ?? 0)
+            // The locked set is part of the digest: discovering a landmark has
+            // to redraw its pin from mystery to merchant.
+            let digest = locations.map(\.uniqueKey).joined(separator: "|").hashValue
+                ^ (selectedKey?.hashValue ?? 0)
+                ^ lockedLandmarkKeys.sorted().joined(separator: "|").hashValue
             guard digest != lastDigest else { return }
             lastDigest = digest
 
@@ -250,7 +281,11 @@ struct MapboxMapContainer: UIViewRepresentable {
             for location in locations {
 
                 let isActive = location.uniqueKey == selectedKey
-                let view = makeAnnotationView(for: location, isActive: isActive)
+                let view = makeAnnotationView(
+                    for: location,
+                    isActive: isActive,
+                    isLocked: lockedLandmarkKeys.contains(location.uniqueKey)
+                )
 
                 annotationViews[location.uniqueKey] = view
 
@@ -288,17 +323,22 @@ struct MapboxMapContainer: UIViewRepresentable {
 
         private func makeAnnotationView(
             for location: NearbyLocationResponse,
-            isActive: Bool
+            isActive: Bool,
+            isLocked: Bool
         ) -> UIView {
 
-            let merchantView = MerchantMarkerView(
-                merchant: location.asMerchant,
-                isInRange: true,
-                isActive: isActive,
-                isPartner: location.is_partner
-            )
+            // An undiscovered landmark gets the mystery pin: no name, no photo,
+            // nothing that gives away what's waiting there.
+            let markerView: AnyView = isLocked
+                ? AnyView(MysteryMarkerView())
+                : AnyView(MerchantMarkerView(
+                    merchant: location.asMerchant,
+                    isInRange: true,
+                    isActive: isActive,
+                    isPartner: location.is_partner
+                ))
 
-            let hc = UIHostingController(rootView: merchantView)
+            let hc = UIHostingController(rootView: markerView)
             hc.view.backgroundColor = .clear
             hc.view.frame = CGRect(x: 0, y: 0, width: 60, height: 72)
             hc.view.accessibilityIdentifier = location.uniqueKey
@@ -550,6 +590,55 @@ struct MapboxMapContainer: UIViewRepresentable {
                 latitude: points.reduce(0) { $0 + $1.lat } / count,
                 longitude: points.reduce(0) { $0 + $1.lng } / count
             )
+        }
+
+        // MARK: - Mystery Landmark Area
+
+        /// Draws where an undiscovered landmark is, without drawing what it is.
+        /// Created after the merchant polygon so the two never fight over which
+        /// sits on top when a selection changes.
+        func syncMysteryArea(mapView: MapboxMaps.MapView, polygon: [PolygonPoint]?) {
+            let digest = polygon?.hashValue ?? -1
+            guard digest != currentMysteryDigest else { return }
+            currentMysteryDigest = digest
+
+            if mysteryFillManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "mystery-area")
+                mysteryFillManager = nil
+            }
+            if mysteryOutlineManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "mystery-area-outline")
+                mysteryOutlineManager = nil
+            }
+
+            guard let points = polygon, points.count >= 3 else { return }
+
+            let coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+
+            var fill = PolygonAnnotation(
+                polygon: Polygon(outerRing: Ring(coordinates: coords), innerRings: [])
+            )
+            fill.fillColor = MysteryAreaStyle.fill
+
+            let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "mystery-area")
+            fillManager.slot = Self.overlaySlot
+            fillManager.annotations = [fill]
+            mysteryFillManager = fillManager
+
+            // Repeat the first point so the stroke closes the ring.
+            var ringCoords = coords
+            if let first = coords.first { ringCoords.append(first) }
+
+            var outline = PolylineAnnotation(lineCoordinates: ringCoords)
+            outline.lineColor = MysteryAreaStyle.stroke
+            outline.lineWidth = MysteryAreaStyle.lineWidth
+            outline.lineJoin = .round
+
+            let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "mystery-area-outline")
+            lineManager.slot = Self.overlaySlot
+            lineManager.lineCap = .round
+            lineManager.annotations = [outline]
+            mysteryOutlineManager = lineManager
         }
 
         // MARK: - Polygon Annotation

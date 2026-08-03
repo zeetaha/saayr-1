@@ -53,7 +53,23 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
     /// Polygon boundary (nil = circular geofence only)
     let boundary_polygon: [PolygonPoint]?
 
+    // MARK: - Landmark discovery
+    /// All optional: the discovery endpoints aren't live yet, so a response
+    /// without them still decodes and the client falls back to `type` and to
+    /// locally stored discoveries.
+    let is_landmark: Bool?
+    let is_discovered: Bool?
+    let discovered_at: String?
+
     // MARK: - Helpers
+
+    /// Landmarks are the pins that stay a mystery until the player stands in
+    /// them. The server flag wins; `type` is the fallback until it ships.
+    var isLandmark: Bool {
+        if let is_landmark { return is_landmark }
+        guard let type = type?.lowercased() else { return false }
+        return ["landmark", "landmarks", "hidden_gem", "hidden_gems", "mystery"].contains(type)
+    }
 
     var coordinate: CLLocationCoordinate2D {
         .init(latitude: latitude, longitude: longitude)
@@ -112,6 +128,10 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
 
         case boundary_polygon
         case type
+
+        case is_landmark
+        case is_discovered
+        case discovered_at
     }
 }
 
