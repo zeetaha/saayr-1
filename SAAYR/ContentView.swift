@@ -3,7 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
-    @State private var selectedTab = 0
+    /// Owned by the router rather than local state, so a screen presented over
+    /// the tab bar can switch tabs on dismiss.
+    @EnvironmentObject var router: AppRouter
     @State private var showPVPPayment = false
 
     var body: some View {
@@ -15,7 +17,7 @@ struct ContentView: View {
                 .background(Color(.systemBackground))
             }
 
-            TabView(selection: $selectedTab) {
+            TabView(selection: $router.selectedTab) {
                 HomeView()
                     .tabItem {
                         Label(languageManager.text("nav.home"), systemImage: "house.fill")
@@ -64,4 +66,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(LanguageManager())
         .environmentObject(UserManager())
+        .environmentObject(AppRouter())
 }

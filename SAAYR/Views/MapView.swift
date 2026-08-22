@@ -18,6 +18,14 @@ struct MapView: View {
     /// from `discovered_landmarks` in the nearby response — the location object
     /// itself carries no description until the landmark is discovered.
     @State private var landmarkDetails: [Int: DiscoveredLandmark] = [:]
+    /// Whether a boss is running, and which one. Only the id and name are
+    /// needed here; the battle screen loads everything else itself.
+    @State private var bossBanner: BossHomeBanner?
+    @State private var bossDestination: BossDestination?
+
+    /// Boss zones, shared with the home banner that decides whether there are
+    /// any at all.
+    @ObservedObject private var bossZoneStore = BossZoneStore.shared
 
     // Fog of War
     @State private var fogZones: [Zone] = []
@@ -101,6 +109,20 @@ struct MapView: View {
         selectedLocation.map(discoveries.isLocked) ?? false
     }
 
+    /// Pins that count towards the boss. Driven purely by the server's
+    /// `is_boss` flag — the map doesn't second-guess it — while the card's
+    /// battle shortcut needs a live boss as well.
+    private var bossKeys: Set<String> {
+        Set(visibleLocations.filter(\.isBossTarget).map(\.uniqueKey))
+    }
+
+    /// The live boss, if one is running. A location says it belongs to the
+    /// event but not which event, so the id comes from the home banner.
+    private var liveBossID: Int? {
+        guard let banner = bossBanner, banner.state == .live else { return nil }
+        return banner.boss_id
+    }
+
     /// The area to walk into for the tapped mystery pin. Showing where it is
     /// gives nothing away about what it is, and without it the pin is an
     /// instruction with no target — landmarks without a boundary polygon get
@@ -121,7 +143,9 @@ struct MapView: View {
                 merchantPolygon: isSelectionLocked ? nil : selectedLocation?.boundary_polygon,
                 mysteryArea: selectedMysteryArea,
                 lockedLandmarkKeys: discoveries.lockedKeys(in: visibleLocations),
+                bossKeys: bossKeys,
                 zones: fogZones,
+                bossZones: bossZoneStore.zones,
                 isArabic: languageManager.currentLanguage == .arabic,
                 isCheckingIn: isDwelling,
                 onCameraChanged: { cameraState in
@@ -321,6 +345,24 @@ struct MapView: View {
                         isEnglish: languageManager.currentLanguage == .english,
                         onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
                     )
+                } else if location.isBossTarget {
+                    // Still an ordinary check-in underneath — that's how the
+                    // damage is dealt — with the reason it matters, and a way
+                    // into the fight when one is running.
+                    BossLocationCard(
+                        location: location,
+                        bossName: bossBanner?.boss_name,
+                        canOpenBattle: liveBossID != nil,
+                        isEnglish: languageManager.currentLanguage == .english,
+                        isCheckingIn: isValidating,
+                        onCheckIn: { beginCheckIn(location) },
+                        onOpenBattle: {
+                            if let bossID = liveBossID {
+                                bossDestination = .battle(bossID: bossID)
+                            }
+                        },
+                        onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
+                    )
                 } else if location.isLandmark {
                     // Discovered landmark: its story, and no check-in button —
                     // a landmark is found once, not visited repeatedly.
@@ -387,11 +429,21 @@ struct MapView: View {
             // updates directly for the already-authorized case.
             locationManager.startUpdating()
             fetchFogZones()
+            fetchBossBanner()
 
             // Restores what this player has already revealed, then reconciles
             // with the server: pulls its record, replays anything it never
             // acknowledged.
             discoveries.load()
+        }
+        .bossFlow(
+            destination: $bossDestination,
+            isEnglish: languageManager.currentLanguage == .english
+        )
+        // The fight can start or finish while the map is open, which changes
+        // both the pins and whether the card offers a way in.
+        .onChange(of: bossDestination) { destination in
+            if destination == nil { fetchBossBanner() }
         }
         // Discovery runs off the filtered fix, not the raw one: entering a
         // landmark awards XP, so it has to clear the same anti-cheat bar as a
@@ -663,6 +715,18 @@ struct MapView: View {
             longitude: visibleRegion.centerLng,
             zoom: target
         )
+    }
+
+    /// Only tells the map *which* boss is live, so the card can offer a way
+    /// into it. The pins themselves come from `is_boss` on each location and
+    /// don't wait on this.
+    private func fetchBossBanner() {
+        BossAPI.shared.fetchHomeBanner { banner in
+            bossBanner = banner
+            // Same banner drives the red zone overlay, so the map keeps it in
+            // step whether the player came through home or straight to here.
+            bossZoneStore.update(for: banner)
+        }
     }
 
     private func fetchFogZones() {

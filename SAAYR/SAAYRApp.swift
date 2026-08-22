@@ -22,6 +22,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNot
     Messaging.messaging().delegate = self
     UNUserNotificationCenter.current().delegate = self
 
+    #if DEBUG
+    // A tap that cold-launches the app is the case `didReceive` alone can't
+    // tell you about, so it's logged from the one place that sees it.
+    NotificationLogger.launched(with: launchOptions)
+    NotificationLogger.dumpSettings()
+    #endif
+
     return true
   }
   
@@ -65,6 +72,10 @@ func application(
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
+    #if DEBUG
+    NotificationLogger.presented(notification)
+    #endif
+    BossPush.handle(notification.request.content.userInfo)
     completionHandler([.banner, .sound, .badge])
   }
   
@@ -73,6 +84,10 @@ func application(
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
+    #if DEBUG
+    NotificationLogger.acted(on: response)
+    #endif
+    BossPush.handle(response.notification.request.content.userInfo)
     completionHandler()
   }
 }
@@ -84,6 +99,7 @@ struct SAAYRApp: App {
     @StateObject private var languageManager = LanguageManager()
     @StateObject private var userManager = UserManager()
     @StateObject private var authManager = AuthManager()
+    @StateObject private var router = AppRouter()
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var trackingRequested = false
@@ -98,6 +114,7 @@ struct SAAYRApp: App {
                         .environmentObject(languageManager)
                         .environmentObject(userManager)
                         .environmentObject(authManager)
+                        .environmentObject(router)
                         .environment(\.layoutDirection, languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight)
                 } else {
                     AuthenticationFlow()
@@ -113,6 +130,15 @@ struct SAAYRApp: App {
                 if authManager.authState == .authenticated {
                     setupHealthKit()
                     setupNotifications()
+
+                    #if DEBUG
+                    // TEMPORARY: holds the boss live-feed open for the whole
+                    // session so its SSE frames keep printing. Delayed so the
+                    // token is definitely in place before it authenticates.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        BossLiveFeedDebug.start()
+                    }
+                    #endif
                 }
             }
         }

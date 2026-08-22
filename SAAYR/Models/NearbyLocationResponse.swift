@@ -64,6 +64,15 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
     /// Emoji the backend picks for the pin, e.g. "📍".
     let icon: String?
 
+    // MARK: - Boss event
+    /// This location counts towards the current boss: checking in here is one
+    /// of the ways damage is dealt.
+    ///
+    /// Note what it does *not* carry — there's no `boss_id` on a location, so
+    /// a pin can say it belongs to the event but not which event. The map gets
+    /// the id from `boss/home-banner` instead.
+    let is_boss: Bool?
+
     // MARK: - Helpers
 
     /// Description in the player's language, falling back to the other one
@@ -76,6 +85,13 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
         return chosen
+    }
+
+    /// A boss target. Landmarks are excluded even if the server flags them:
+    /// an undiscovered landmark must keep its mystery pin, and the two
+    /// treatments can't both win.
+    var isBossTarget: Bool {
+        is_boss == true && !isLandmark
     }
 
     /// Landmarks are the pins that stay a mystery until the player stands in
@@ -149,6 +165,7 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
         case discovered_at
         case description_ar
         case icon
+        case is_boss
     }
 }
 

@@ -39,7 +39,14 @@ struct MapboxMapContainer: UIViewRepresentable {
     /// `uniqueKey`s of landmarks this player hasn't discovered yet — drawn as
     /// mystery pins instead of merchant markers.
     var lockedLandmarkKeys: Set<String>
+    /// `uniqueKey`s of locations that count towards the current boss — drawn
+    /// as boss markers so an on-site event has somewhere to point at.
+    var bossKeys: Set<String> = []
     var zones: [Zone]
+    /// Areas of the boss the home banner is advertising, drawn in red above
+    /// the fog. Empty whenever no banner is showing, which is what takes the
+    /// overlay back off the map.
+    var bossZones: [BossZone] = []
     /// Picks `name_ar` over `name` for the zone labels.
     var isArabic: Bool
     var isCheckingIn: Bool
@@ -118,11 +125,16 @@ struct MapboxMapContainer: UIViewRepresentable {
             isArabic: isArabic
         )
 
+        // After the fog, before the markers: the boss areas have to sit over
+        // the blackout and under everything the player can tap.
+        context.coordinator.syncBossZones(mapView: mapView, zones: bossZones)
+
         context.coordinator.syncAnnotations(
             mapView: mapView,
             locations: locations,
             selectedKey: selectedLocation?.uniqueKey,
-            lockedLandmarkKeys: lockedLandmarkKeys
+            lockedLandmarkKeys: lockedLandmarkKeys,
+            bossKeys: bossKeys
         )
 
         context.coordinator.syncPolygon(
@@ -190,6 +202,11 @@ struct MapboxMapContainer: UIViewRepresentable {
         private var zoneLabelManager: PointAnnotationManager?
         private var currentZonesDigest: Int = -1
 
+        // Boss zone annotation state
+        private var bossZoneFillManager: PolygonAnnotationManager?
+        private var bossZoneOutlineManager: PolylineAnnotationManager?
+        private var currentBossZonesDigest: Int = -1
+
         /// Zone boundaries: same green as a merchant, lighter fill because the
         /// areas are far larger. `fog` blacks out everything outside them.
         private enum ZoneStyle {
@@ -221,6 +238,15 @@ struct MapboxMapContainer: UIViewRepresentable {
             static let lockedLabelHalo  = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.7)
             static let labelSize: Double      = 15
             static let labelHaloWidth: Double = 1.6
+        }
+
+        /// The boss areas. Red because nothing else on this map is — the
+        /// zones are green and the fog is near-black, so red reads as "this
+        /// is the event" without competing with anything.
+        private enum BossZoneStyle {
+            static let stroke = StyleColor(red: 214, green: 45, blue: 45, alpha: 1.0)
+            static let fill   = StyleColor(red: 214, green: 45, blue: 45, alpha: 0.15)
+            static let lineWidth: Double = 3.0
         }
 
         /// Standard-style slot for everything we draw. `top` sits above the
@@ -263,13 +289,16 @@ struct MapboxMapContainer: UIViewRepresentable {
             mapView: MapboxMaps.MapView,
             locations: [NearbyLocationResponse],
             selectedKey: String?,
-            lockedLandmarkKeys: Set<String>
+            lockedLandmarkKeys: Set<String>,
+            bossKeys: Set<String>
         ) {
-            // The locked set is part of the digest: discovering a landmark has
-            // to redraw its pin from mystery to merchant.
+            // Both sets are part of the digest: discovering a landmark has to
+            // redraw its pin from mystery to merchant, and a boss starting or
+            // ending has to swap those pins too.
             let digest = locations.map(\.uniqueKey).joined(separator: "|").hashValue
                 ^ (selectedKey?.hashValue ?? 0)
                 ^ lockedLandmarkKeys.sorted().joined(separator: "|").hashValue
+                ^ bossKeys.sorted().joined(separator: "|").hashValue
             guard digest != lastDigest else { return }
             lastDigest = digest
 
@@ -284,7 +313,8 @@ struct MapboxMapContainer: UIViewRepresentable {
                 let view = makeAnnotationView(
                     for: location,
                     isActive: isActive,
-                    isLocked: lockedLandmarkKeys.contains(location.uniqueKey)
+                    isLocked: lockedLandmarkKeys.contains(location.uniqueKey),
+                    isBoss: bossKeys.contains(location.uniqueKey)
                 )
 
                 annotationViews[location.uniqueKey] = view
@@ -324,19 +354,28 @@ struct MapboxMapContainer: UIViewRepresentable {
         private func makeAnnotationView(
             for location: NearbyLocationResponse,
             isActive: Bool,
-            isLocked: Bool
+            isLocked: Bool,
+            isBoss: Bool
         ) -> UIView {
 
-            // An undiscovered landmark gets the mystery pin: no name, no photo,
-            // nothing that gives away what's waiting there.
-            let markerView: AnyView = isLocked
-                ? AnyView(MysteryMarkerView())
-                : AnyView(MerchantMarkerView(
+            // Order matters. A mystery pin outranks everything — revealing that
+            // an undiscovered landmark is a boss target would give away that
+            // there's something there at all. A boss target outranks the
+            // ordinary merchant marker, because during an event that's the
+            // reason to walk to it.
+            let markerView: AnyView
+            if isLocked {
+                markerView = AnyView(MysteryMarkerView())
+            } else if isBoss {
+                markerView = AnyView(BossMarkerView())
+            } else {
+                markerView = AnyView(MerchantMarkerView(
                     merchant: location.asMerchant,
                     isInRange: true,
                     isActive: isActive,
                     isPartner: location.is_partner
                 ))
+            }
 
             let hc = UIHostingController(rootView: markerView)
             hc.view.backgroundColor = .clear
@@ -372,6 +411,13 @@ struct MapboxMapContainer: UIViewRepresentable {
             guard digest != currentZonesDigest else { return }
             currentZonesDigest = digest
 
+            // Managers draw in creation order, and everything below is about
+            // to be torn down and remade — which would leave the fog newer
+            // than the boss overlay, hiding it. Forcing a rebuild makes
+            // `syncBossZones`, called straight after this in the same pass,
+            // the last one created again.
+            currentBossZonesDigest = -1
+
             if zoneFogManager != nil {
                 mapView.annotations.removeAnnotationManager(withId: "zones-fog")
                 zoneFogManager = nil
@@ -401,8 +447,8 @@ struct MapboxMapContainer: UIViewRepresentable {
             // draw above every shaded region, whichever way this function exits.
             defer { installZoneLabels(mapView: mapView, zones: zones, isArabic: isArabic) }
 
-            let unlockedRings = Self.rings(of: zones.filter(\.is_unlocked))
-            let lockedRings   = Self.rings(of: zones.filter { !$0.is_unlocked })
+            let unlockedRings = Self.rings(of: zones.filter(\.is_unlocked).map(\.boundary_polygon))
+            let lockedRings   = Self.rings(of: zones.filter { !$0.is_unlocked }.map(\.boundary_polygon))
 
             // Created first so every shaded region below draws over the fog.
             installFog(mapView: mapView, zoneRings: unlockedRings + lockedRings)
@@ -445,12 +491,65 @@ struct MapboxMapContainer: UIViewRepresentable {
             zoneOutlineManager = lineManager
         }
 
+        // MARK: - Boss Zone Annotations
+
+        /// Draws the boss areas in red, or clears them when there are none.
+        /// An empty `zones` is the normal way this ends: the banner stopped
+        /// showing a boss, so the overlay comes off.
+        func syncBossZones(mapView: MapboxMaps.MapView, zones: [BossZone]) {
+            let digest = zones.map { "\($0.id)" }.joined(separator: "|").hashValue
+            guard digest != currentBossZonesDigest else { return }
+            currentBossZonesDigest = digest
+
+            if bossZoneFillManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "boss-zones-fill")
+                bossZoneFillManager = nil
+            }
+            if bossZoneOutlineManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "boss-zones-outline")
+                bossZoneOutlineManager = nil
+            }
+
+            let rings = Self.rings(of: zones.map(\.boundary_polygon))
+            guard !rings.isEmpty else { return }
+
+            var fills: [PolygonAnnotation] = []
+            var outlines: [PolylineAnnotation] = []
+            for coords in rings {
+                var fill = PolygonAnnotation(
+                    polygon: Polygon(outerRing: Ring(coordinates: coords), innerRings: [])
+                )
+                fill.fillColor = BossZoneStyle.fill
+                fills.append(fill)
+
+                // A polyline is open: without repeating the first point the
+                // segment back to it is never drawn and the ring shows a gap
+                // along whichever edge the boundary happens to start on.
+                var outline = PolylineAnnotation(lineCoordinates: coords + [coords[0]])
+                outline.lineColor = BossZoneStyle.stroke
+                outline.lineWidth = BossZoneStyle.lineWidth
+                outline.lineJoin = .round
+                outlines.append(outline)
+            }
+
+            let fillManager = mapView.annotations.makePolygonAnnotationManager(id: "boss-zones-fill")
+            fillManager.slot = Self.overlaySlot
+            fillManager.annotations = fills
+            bossZoneFillManager = fillManager
+
+            let lineManager = mapView.annotations.makePolylineAnnotationManager(id: "boss-zones-outline")
+            lineManager.slot = Self.overlaySlot
+            lineManager.lineCap = .round
+            lineManager.annotations = outlines
+            bossZoneOutlineManager = lineManager
+        }
+
         /// Boundary rings of `zones`, as map coordinates, dropping any too
         /// degenerate to enclose an area.
-        private static func rings(of zones: [Zone]) -> [[CLLocationCoordinate2D]] {
-            zones
-                .map { zone in
-                    zone.boundary_polygon.map {
+        private static func rings(of boundaries: [[ZoneCoordinate]]) -> [[CLLocationCoordinate2D]] {
+            boundaries
+                .map { boundary in
+                    boundary.map {
                         CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)
                     }
                 }

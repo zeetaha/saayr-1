@@ -60,6 +60,22 @@ class WebService {
     /// second device.
     static var landmarkDiscoveries = baseUrl + "landmarks/my-discoveries"
 
+    // MARK: - Boss event
+    /// Poster state for the home screen.
+    static var bossHomeBanner = baseUrl + "boss/home-banner"
+    /// Areas the current boss is fought in. Not per-boss: the server answers
+    /// for whichever boss is live or scheduled, so it's only worth calling
+    /// while the home banner is showing one.
+    static var bossZones = baseUrl + "boss/zones"
+    /// Everything below is per-boss. The battle and waitlist screens each pair
+    /// one REST call with an SSE stream; the REST call hydrates, the stream
+    /// keeps it current. Do not poll the REST endpoints.
+    static func bossBattleState(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/battle-state" }
+    static func bossLiveFeed(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/live-feed" }
+    static func bossWaitlist(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/waitlist" }
+    static func bossWaitlistStream(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/waitlist/stream" }
+    static func bossRewards(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/rewards" }
+
     // MARK: - User
     static var profile       = baseUrl + "user/profile"
     static var dashboard     = baseUrl + "user/dashboard"

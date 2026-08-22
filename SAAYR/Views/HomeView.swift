@@ -10,6 +10,12 @@ struct HomeView: View {
     @State private var isCheckingPVP = false
     @State private var particles: [Particle] = []
     @State private var pollTimer: Timer?
+    /// Fires a minute after a scheduled boss's start time, to pick up the
+    /// state the server flips at that moment.
+    @State private var bossStartTimer: Timer?
+    /// The boss poster, when there is one to show.
+    @State private var bossBanner: BossHomeBanner?
+    @State private var bossDestination: BossDestination?
     
     var body: some View {
         NavigationView {
@@ -44,6 +50,17 @@ struct HomeView: View {
                                 HomeSkeletonView()
                             } else {
                             greetingSection
+
+                            // Above the pet: a boss is a limited event, and it
+                            // outranks the everyday screen while it's running.
+                            if let banner = bossBanner, !banner.isEmpty {
+                                BossHomeBannerCard(
+                                    banner: banner,
+                                    isEnglish: languageManager.currentLanguage == .english,
+                                    onTap: { bossDestination = BossDestination.from(banner: banner) }
+                                )
+                            }
+
                             PetDisplayCard(
                                 petName: userManager.userData.petName ?? "",
                                 level: userManager.userData.level ?? 0,
@@ -55,7 +72,10 @@ struct HomeView: View {
                             .padding(.horizontal)
 
                             statsGrid
-                           PVPBattleCard(isLoading: isCheckingPVP) {
+                           PVPBattleCard(
+                               isLoading: isCheckingPVP,
+                               isBlockedByBoss: bossBanner?.pvp_blocked == true
+                           ) {
                                guard userManager.userData.pvp_enabled, !isCheckingPVP else { return }
                                isCheckingPVP = true
                                ServiceModel.shared.fetchMyMatchFull { result in
@@ -99,9 +119,14 @@ struct HomeView: View {
                     .environmentObject(userManager)
                 }
             }
+            .bossFlow(
+                destination: $bossDestination,
+                isEnglish: languageManager.currentLanguage == .english
+            )
             .onAppear {
                 generateParticles()
                 userManager.fetchAllUserData()
+                loadBossBanner()
                 pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
                     userManager.fetchMyMatch()
                 }
@@ -109,11 +134,61 @@ struct HomeView: View {
             .onDisappear {
                 pollTimer?.invalidate()
                 pollTimer = nil
+                bossStartTimer?.invalidate()
+                bossStartTimer = nil
             }
         }
         .navigationViewStyle(StackNavigationViewStyle()) // Fix iPad NavigationView
+        // A boss can start, end or be cancelled while a screen is open, so the
+        // banner is re-read whenever the player comes back out of the flow.
+        .onChange(of: bossDestination) { destination in
+            if destination == nil { loadBossBanner() }
+        }
+        // A boss push — scheduled, live or ended — means the boss moved while
+        // the player was sitting on this screen, where nothing else would go
+        // and look.
+        .onReceive(NotificationCenter.default.publisher(for: .bossBannerNeedsRefresh)) { _ in
+            loadBossBanner()
+        }
     }
-    
+
+    /// Silently absent on failure: an unreachable boss endpoint should cost the
+    /// home screen a banner, not an error.
+    private func loadBossBanner() {
+        BossAPI.shared.fetchHomeBanner { banner in
+            bossBanner = banner
+            // The map's boss overlay is tied to this banner: it appears with
+            // the banner and is removed when the banner goes.
+            BossZoneStore.shared.update(for: banner)
+            armBossStartRefresh(for: banner)
+        }
+    }
+
+    /// Re-reads the banner a minute after a scheduled boss is due to start.
+    ///
+    /// The countdown hitting zero doesn't change anything by itself — the
+    /// banner still says `scheduled` until the server flips it, and nothing
+    /// else on this screen would go and look. The minute of slack is for the
+    /// server to actually make the transition; asking at exactly zero tends to
+    /// come back still scheduled.
+    private func armBossStartRefresh(for banner: BossHomeBanner?) {
+        bossStartTimer?.invalidate()
+        bossStartTimer = nil
+
+        guard let banner, banner.state == .scheduled,
+              let startsAt = banner.startsAtDate else { return }
+
+        // Only ever armed for a moment still ahead of us. A start time already
+        // more than a minute past means this refresh *was* the one that came
+        // back still scheduled — re-arming on it would spin.
+        let delay = startsAt.addingTimeInterval(60).timeIntervalSinceNow
+        guard delay > 0 else { return }
+
+        bossStartTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
+            loadBossBanner()
+        }
+    }
+
     // MARK: - Sections
     
     private var greetingSection: some View {
@@ -309,10 +384,14 @@ struct PVPBattleCard: View {
     @EnvironmentObject var languageManager: LanguageManager
     @EnvironmentObject var userManager: UserManager
     var isLoading: Bool = false
+    /// True while a boss is live or about to start. PvP is suspended for that
+    /// window, so the card is dimmed and inert rather than hidden — a card that
+    /// vanished would read as a bug.
+    var isBlockedByBoss: Bool = false
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: { if !isBlockedByBoss { action() } }) {
             HStack() {
                 // Icon with red background
                 ZStack {
@@ -333,7 +412,11 @@ struct PVPBattleCard: View {
                     Text(languageManager.currentLanguage == .english ? "PVP Battle" : "معركة PVP")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
-                    Text(userManager.userData.pvp_message)
+                    Text(isBlockedByBoss
+                         ? (languageManager.currentLanguage == .english
+                            ? "Paused during the boss event"
+                            : "متوقفة أثناء معركة الزعيم")
+                         : userManager.userData.pvp_message)
                         .font(.system(size: 14))
                         .foregroundColor(.gray)
                 }
@@ -353,6 +436,8 @@ struct PVPBattleCard: View {
             )
         }
         .buttonStyle(PlainButtonStyle()) // Remove default button styling
+        .opacity(isBlockedByBoss ? 0.45 : 1)
+        .allowsHitTesting(!isBlockedByBoss)
     }
 }
 

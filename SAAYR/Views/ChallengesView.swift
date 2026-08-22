@@ -5,6 +5,11 @@ import SwiftUI
 struct ChallengesResponse: Decodable {
     let daily: ChallengeGroup
     let weekly: ChallengeGroup
+    /// Present only while a boss is scheduled, live, or ended within the last
+    /// 24 hours. Optional so the screen still decodes on a backend that hasn't
+    /// shipped the field, and on the long stretches with no boss at all.
+    /// Defaulted so the preview fixtures don't all have to name it.
+    var boss: BossChallengeSummary? = nil
 }
 
 struct ChallengeGroup: Decodable {
@@ -56,6 +61,7 @@ struct ChallengesView: View {
     @State private var weeklyExpanded = false
     @State private var dailyDeadline: Date? = nil
     @State private var weeklyDeadline: Date? = nil
+    @State private var bossDestination: BossDestination? = nil
 
     private let dailyColor  = Color(hex: "#7C3AED")
     private let weeklyColor = Color(hex: "#F97316")
@@ -87,6 +93,21 @@ struct ChallengesView: View {
                         headerSection
                         if let data = response {
                             summaryCards(data: data)
+
+                            // Sits above the daily and weekly lists: the boss
+                            // is time-boxed and the others aren't, so it's the
+                            // one that can be missed.
+                            if let boss = data.boss, boss.state != .idle, boss.state != .unknown {
+                                BossChallengeCard(
+                                    boss: boss,
+                                    isEnglish: languageManager.currentLanguage == .english,
+                                    onPrimaryAction: {
+                                        bossDestination = BossDestination.from(challenge: boss)
+                                    }
+                                )
+                                .padding(.horizontal)
+                            }
+
                             challengeSection(
                                 title: "Daily Challenges",
                                 group: data.daily,
@@ -108,7 +129,16 @@ struct ChallengesView: View {
                 }
             }
         }
+        .bossFlow(
+            destination: $bossDestination,
+            isEnglish: languageManager.currentLanguage == .english
+        )
         .onAppear { loadChallenges() }
+        // Coming back from the battle or the waitlist can have moved the boss
+        // to its next state, so the card is refetched rather than left stale.
+        .onChange(of: bossDestination) { destination in
+            if destination == nil { loadChallenges() }
+        }
     }
 
     // MARK: - Header

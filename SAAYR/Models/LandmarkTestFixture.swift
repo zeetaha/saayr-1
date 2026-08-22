@@ -63,7 +63,8 @@ enum LandmarkTestFixture {
             is_discovered: nil,
             discovered_at: nil,
             description_ar: "قلعة من الطين في قلب الرياض القديمة، حيث بدأت قصة المدينة الحديثة عام ١٩٠٢.",
-            icon: "🏰"
+            icon: "🏰",
+            is_boss: false
         )
     }
 }
