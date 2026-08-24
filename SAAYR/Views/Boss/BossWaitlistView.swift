@@ -51,6 +51,9 @@ final class BossWaitlistModel: ObservableObject {
     @Published var total: Int = 0
     @Published var isOnWaitlist: Bool = false
     @Published var isToggling = false
+    /// The last failed join, until it's shown. Held as the error rather than a
+    /// string because the wording depends on the language the view knows.
+    @Published var joinError: BossAPIError?
     /// Set when the stream reports the boss went live — the screen uses it to
     /// hand the player straight to the battle.
     @Published var didGoLive = false
@@ -150,19 +153,32 @@ final class BossWaitlistModel: ObservableObject {
 
     // MARK: Actions
 
-    func toggleWaitlist() {
-        guard !isToggling else { return }
+    /// Join only — there is deliberately no leave path. The button used to
+    /// toggle, which meant a second tap silently dropped the player off the
+    /// waitlist when they meant to confirm.
+    func join() {
+        guard !isToggling, !isOnWaitlist else { return }
         isToggling = true
-        let joining = !isOnWaitlist
+        // Cleared up front so a retry doesn't leave the previous reason on
+        // screen next to a request that's still in flight.
+        joinError = nil
 
-        BossAPI.shared.toggleWaitlist(bossID: bossID, join: joining) { [weak self] response in
+        BossAPI.shared.toggleWaitlist(bossID: bossID, join: true) { [weak self] result in
             guard let self else { return }
             self.isToggling = false
-            guard let response else { return }
-            self.isOnWaitlist = response.joined
-            self.total = response.interested_count
-            // The row for the player arrives on the stream; nothing is
-            // inserted here, or it would appear twice.
+
+            switch result {
+            case .success(let response):
+                self.isOnWaitlist = response.joined
+                self.total = response.interested_count
+                // The row for the player arrives on the stream; nothing is
+                // inserted here, or it would appear twice.
+            case .failure(let error):
+                // A 400 here is usually a reason, not a fault — "joining opens
+                // in 2m 17s" is something the player can act on, so it has to
+                // reach them instead of dying in a log line.
+                self.joinError = error
+            }
         }
     }
 }
@@ -183,6 +199,8 @@ struct BossWaitlistView: View {
     /// Drives the "2m ago" column. A slow tick is enough — the strings only
     /// change once a minute.
     @State private var now = Date()
+    /// Set from `model.joinError`; the toast modifier clears it when it goes.
+    @State private var toast: ToastContent?
     private let clock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     init(
@@ -221,11 +239,19 @@ struct BossWaitlistView: View {
                 membersList
             }
         }
+        .topToast($toast)
         .onAppear { model.start() }
         .onDisappear { model.stop() }
         .onReceive(clock) { now = $0 }
         .onChange(of: model.didGoLive) { didGoLive in
             if didGoLive { onGoLive() }
+        }
+        // onReceive rather than onChange: BossAPIError wraps an Error and so
+        // can't be Equatable. Formatting happens here because the wording
+        // depends on `isEnglish`, which the model doesn't have.
+        .onReceive(model.$joinError) { error in
+            guard let error else { return }
+            toast = .error(error.displayMessage(isEnglish: isEnglish))
         }
     }
 
@@ -302,15 +328,15 @@ struct BossWaitlistView: View {
                 }
             }
 
-            Button(action: model.toggleWaitlist) {
+            Button(action: model.join) {
                 HStack(spacing: 6) {
                     if model.isToggling {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "#1A1206")))
                     } else {
                         Text(model.isOnWaitlist
-                             ? (isEnglish ? "✓ Reminder set" : "✓ تم ضبط التذكير")
-                             : (isEnglish ? "🔔 Remind me" : "🔔 ذكّرني"))
+                             ? (isEnglish ? "✓ Joined" : "✓ انضممت")
+                             : (isEnglish ? "Join" : "انضم"))
                             .font(.system(size: 14, weight: .bold))
                     }
                 }
@@ -323,7 +349,9 @@ struct BossWaitlistView: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(model.isToggling)
+            // Inert once joined: the state is shown, but there's nothing left
+            // to tap, so the player can't leave by accident.
+            .disabled(model.isToggling || model.isOnWaitlist)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 18).fill(BossStyle.surface))

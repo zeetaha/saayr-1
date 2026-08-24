@@ -22,6 +22,11 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     
+    <!-- Export Compliance: no non-exempt encryption, so App Store Connect
+         stops asking on every upload. HTTPS and Keychain are exempt. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+    
     <!-- Location Permissions -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>We need your location to show nearby check-in points and enhance your gaming experience</string>

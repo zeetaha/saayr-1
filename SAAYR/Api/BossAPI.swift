@@ -68,20 +68,34 @@ final class BossAPI {
         }
     }
 
-    /// Joins or leaves the waitlist. Idempotent in both directions; the server
-    /// answers 400 if the boss isn't scheduled any more.
+    /// Joins or leaves the waitlist. Idempotent in both directions.
+    ///
+    /// The server answers 400 with a reason the player can act on — the boss
+    /// isn't scheduled any more, or joining hasn't opened yet — so failures
+    /// carry the body through rather than collapsing to nil.
     func toggleWaitlist(
         bossID: Int,
         join: Bool,
-        completion: @escaping (WaitlistToggleResponse?) -> Void
+        completion: @escaping (Result<WaitlistToggleResponse, BossAPIError>) -> Void
     ) {
-        ServiceModel.shared.postRequest(
+        ServiceModel.shared.postRequestReportingBody(
             endpoint: WebService.bossWaitlist(bossID),
             parameters: ["join": join]
-        ) { [weak self] result in
+        ) { [weak self] result, body, status in
             guard let self else { return }
             DispatchQueue.main.async {
-                completion(self.decode(WaitlistToggleResponse.self, from: result, label: "waitlist toggle"))
+                switch result {
+                case .success(let data):
+                    if let response = try? self.decoder.decode(WaitlistToggleResponse.self, from: data) {
+                        completion(.success(response))
+                    } else {
+                        completion(.failure(BossAPIError(body: data, status: status, underlying: nil)))
+                    }
+                case .failure(let error):
+                    print("⚠️ Boss waitlist-toggle: \(status.map(String.init) ?? "no status") —",
+                          String(data: body ?? Data(), encoding: .utf8) ?? error.localizedDescription)
+                    completion(.failure(BossAPIError(body: body, status: status, underlying: error)))
+                }
             }
         }
     }
@@ -119,6 +133,36 @@ final class BossAPI {
 
     // MARK: - Streams
 
+    /// Collects the boss reward. The XP itself is settled server-side; this
+    /// marks it acknowledged so the ended card stops coming back in the
+    /// challenges payload.
+    ///
+    /// Idempotent by contract, so a retry after a dropped response is safe.
+    /// The reward detail is optional on success: the XP has been credited by
+    /// the time a 2xx comes back, so the status is what decides the outcome. A
+    /// body that doesn't decode must not be reported as a failure — that would
+    /// tell the player it didn't work after it already did.
+    func claimRewards(
+        bossID: Int,
+        completion: @escaping (Result<BossRewardDetail?, BossAPIError>) -> Void
+    ) {
+        ServiceModel.shared.postRequestReportingBody(
+            endpoint: WebService.bossClaimRewards(bossID)
+        ) { [weak self] result, body, status in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let data):
+                    completion(.success(try? self.decoder.decode(BossRewardDetail.self, from: data)))
+                case .failure(let error):
+                    print("⚠️ Boss claim-rewards: \(status.map(String.init) ?? "no status") —",
+                          String(data: body ?? Data(), encoding: .utf8) ?? error.localizedDescription)
+                    completion(.failure(BossAPIError(body: body, status: status, underlying: error)))
+                }
+            }
+        }
+    }
+
     /// Live membership of the waitlist. Open on entering the waitlist screen,
     /// close on leaving it.
     func waitlistStream(bossID: Int) -> EventSource? {
@@ -152,5 +196,52 @@ final class BossAPI {
             print("⚠️ Boss \(label): request failed —", error.localizedDescription)
             return nil
         }
+    }
+}
+
+/// A failed boss request, carrying whatever the server said about it.
+///
+/// The API answers errors as `{"detail": "..."}`, so that's preferred; the
+/// status code is the fallback, because "something went wrong" tells the
+/// player nothing they can act on.
+struct BossAPIError: Error {
+    let body: Data?
+    let status: Int?
+    let underlying: Error?
+
+    /// The reward was already collected. The endpoint is idempotent by
+    /// contract and answers 409 on a repeat, which is a success from the
+    /// player's side — a retry after a dropped response must not look broken.
+    var isAlreadyClaimed: Bool { status == 409 }
+
+    /// The server's own words, when it sent any.
+    var serverMessage: String? {
+        guard let body,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else { return nil }
+
+        if let detail = json["detail"] as? String, !detail.isEmpty { return detail }
+        if let message = json["message"] as? String, !message.isEmpty { return message }
+        if let error = json["error"] as? String, !error.isEmpty { return error }
+        return nil
+    }
+
+    /// What to put in front of the player: the server's message when there is
+    /// one, otherwise something that at least names the failure.
+    ///
+    /// The server's wording is nearly always better than anything written
+    /// here — "Joining opens in 2m 17s" tells the player what to do, where a
+    /// generic retry line doesn't — so the fallbacks stay deliberately plain
+    /// and are only reached when there's no body to quote.
+    func displayMessage(isEnglish: Bool) -> String {
+        if let serverMessage { return serverMessage }
+        if let status {
+            return isEnglish
+                ? "Something went wrong — server returned \(status)."
+                : "حدث خطأ ما — استجابة الخادم \(status)."
+        }
+        return isEnglish
+            ? "Something went wrong. Check your connection and try again."
+            : "حدث خطأ ما. تحقّق من اتصالك وحاول مرة أخرى."
     }
 }

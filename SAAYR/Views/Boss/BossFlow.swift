@@ -90,10 +90,14 @@ struct BossFlowPresenter: ViewModifier {
     @Binding var destination: BossDestination?
     let isEnglish: Bool
 
-    @EnvironmentObject private var router: AppRouter
+    /// Lives on the host, not on the boss screens, so a confirmation can
+    /// survive the screen that earned it being dismissed.
+    @State private var toast: ToastContent?
 
     func body(content: Content) -> some View {
-        content.fullScreenCover(item: $destination) { destination in
+        content
+            .topToast($toast)
+            .fullScreenCover(item: $destination) { destination in
             switch destination {
             case let .waitlist(bossID, name, startsAt, imageURL, joined, interested):
                 BossWaitlistView(
@@ -115,24 +119,40 @@ struct BossFlowPresenter: ViewModifier {
                     bossID: bossID,
                     isEnglish: isEnglish,
                     onClose: { self.destination = nil },
-                    onEnded: { _ in self.destination = .rewards(bossID: bossID) },
-                    // Close the battle first, then switch tabs — the map has to
-                    // be what's on screen when the player lands, not something
-                    // behind a full-screen cover.
-                    onCheckInRequested: {
-                        self.destination = nil
-                        router.goToMapForCheckIn()
-                    }
+                    onEnded: { _ in self.destination = .rewards(bossID: bossID) }
                 )
 
             case .rewards(let bossID):
                 BossRewardsView(
                     bossID: bossID,
                     isEnglish: isEnglish,
-                    onClose: { self.destination = nil }
+                    onClose: { self.destination = nil },
+                    onCollected: { xp in
+                        // Dismiss first: the toast is behind this cover, so it
+                        // reads as confirmation of leaving rather than a
+                        // second thing stacked on top of the screen.
+                        self.destination = nil
+
+                        // Held until the cover is actually gone. Shown any
+                        // sooner and it animates in underneath, so the player
+                        // sees a toast that was simply always there.
+                        let message = self.collectedMessage(xp: xp)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            self.toast = .success(message)
+                        }
+                    }
                 )
             }
         }
+    }
+
+    private func collectedMessage(xp: Int?) -> String {
+        guard let xp, xp > 0 else {
+            return isEnglish ? "Rewards collected" : "تم استلام المكافآت"
+        }
+        return isEnglish
+            ? "Rewards collected · +\(xp.formatted()) XP"
+            : "تم استلام المكافآت · +\(xp.formatted()) نقطة"
     }
 }
 

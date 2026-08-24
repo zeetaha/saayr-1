@@ -13,10 +13,19 @@ struct BossRewardsView: View {
     let bossID: Int
     let isEnglish: Bool
     let onClose: () -> Void
+    /// Collected successfully. Separate from `onClose` because the
+    /// confirmation has to outlive this screen — it's shown by the host, after
+    /// this one has gone.
+    let onCollected: (_ xpEarned: Int?) -> Void
+
+    @EnvironmentObject private var userManager: UserManager
 
     @State private var rewards: BossRewards?
     @State private var isLoading = true
     @State private var celebrate = false
+    @State private var isClaiming = false
+    @State private var hasClaimed = false
+    @State private var claimError: String?
 
     var body: some View {
         ZStack {
@@ -120,37 +129,140 @@ struct BossRewardsView: View {
         )
     }
 
-    /// Disabled on purpose. The backend has no claim endpoint yet — `claimed`
-    /// and `claimed_at` are placeholders that always come back false/null —
-    /// and the XP above is already granted regardless. The control is here so
-    /// the layout is final and there's an obvious place to wire the action in.
+    /// Collecting is what retires the event: the server marks the reward
+    /// acknowledged and stops sending the ended boss in the challenges
+    /// payload, so the card clears itself once this screen closes. The XP is
+    /// settled server-side, so a zero-XP reward still collects normally.
     private func claimButton(_ detail: BossRewardDetail) -> some View {
-        let alreadyClaimed = detail.claimed == true
+        let isCollected = detail.claimed == true || hasClaimed
 
         return VStack(spacing: 6) {
-            Text(alreadyClaimed
-                 ? (isEnglish ? "🎁 Collected" : "🎁 تم الاستلام")
-                 : (isEnglish ? "🎁 Collect rewards" : "🎁 استلم مكافآتك"))
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Color(hex: "#1A1206").opacity(0.55))
+            Button(action: claim) {
+                HStack(spacing: 6) {
+                    if isClaiming {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "#1A1206")))
+                    } else {
+                        Text(isCollected
+                             ? (isEnglish ? "🎁 Collected" : "🎁 تم الاستلام")
+                             : (isEnglish ? "🎁 Collect rewards" : "🎁 استلم مكافآتك"))
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                }
+                .foregroundColor(Color(hex: "#1A1206"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(RoundedRectangle(cornerRadius: 14).fill(BossStyle.gold.opacity(0.45)))
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(BossStyle.gold.opacity(isCollected ? 0.45 : 1))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isClaiming || isCollected)
 
-            Text(isEnglish ? "Coming soon — your XP is already added" : "قريبًا — نقاطك مضافة بالفعل")
-                .font(.system(size: 10))
-                .foregroundColor(BossStyle.textDim)
+            if let claimError {
+                errorBanner(claimError)
+            }
         }
     }
 
+    /// The app's error idiom — warning glyph, red text, red-tinted panel —
+    /// in the boss palette. Carries the server's wording verbatim, so it has
+    /// to wrap rather than truncate.
+    private func errorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+            Text(message)
+                .font(.system(size: 12, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(BossStyle.live)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 12).fill(BossStyle.live.opacity(0.12)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(BossStyle.live.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// Closes on success rather than sitting on a collected screen — the host
+    /// refetches challenges when this dismisses, which is what makes the ended
+    /// card disappear.
+    private func claim() {
+        guard !isClaiming else { return }
+        isClaiming = true
+        claimError = nil
+
+        BossAPI.shared.claimRewards(bossID: bossID) { result in
+            isClaiming = false
+
+            switch result {
+            case .success(let detail):
+                // Prefer what the claim returned; fall back to the figure
+                // already on screen, which is the same number.
+                collected(xp: detail?.xp_earned ?? rewards?.rewards?.xp_earned)
+            // Already collected — the endpoint is idempotent and says so with
+            // a 409. Treating it as a failure would show an error for a retry
+            // that actually worked.
+            case .failure(let error) where error.isAlreadyClaimed:
+                collected(xp: rewards?.rewards?.xp_earned)
+            case .failure(let error):
+                // The server's own wording, not a generic retry line — it's
+                // the only thing that tells the player what actually stopped
+                // them.
+                claimError = error.displayMessage(isEnglish: isEnglish)
+            }
+        }
+    }
+
+    /// Claiming credits XP to the real balance, so the cached profile is stale
+    /// the moment it succeeds — refreshed here rather than left for the next
+    /// screen to notice.
+    private func collected(xp: Int?) {
+        hasClaimed = true
+        userManager.fetchAllUserData()
+        onCollected(xp)
+    }
+
+    /// A player who never landed a hit has no reward to collect, but their
+    /// ended card needs the same way out — without this it has no button at
+    /// all and sits in Challenges forever.
     private var didNotParticipate: some View {
-        Text(isEnglish
-             ? "You didn't join this one. Next time!"
-             : "!لم تشارك هذه المرة. في المرة القادمة")
-            .font(.system(size: 13))
-            .foregroundColor(BossStyle.textDim)
-            .multilineTextAlignment(.center)
-            .padding(.vertical, 18)
+        VStack(spacing: 14) {
+            Text(isEnglish
+                 ? "You didn't join this one. Next time!"
+                 : "!لم تشارك هذه المرة. في المرة القادمة")
+                .font(.system(size: 13))
+                .foregroundColor(BossStyle.textDim)
+                .multilineTextAlignment(.center)
+
+            Button(action: claim) {
+                HStack(spacing: 6) {
+                    if isClaiming {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: BossStyle.textPrimary))
+                    } else {
+                        Text(isEnglish ? "Dismiss" : "إخفاء")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                }
+                .foregroundColor(BossStyle.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.10)))
+            }
+            .buttonStyle(.plain)
+            .disabled(isClaiming)
+
+            if let claimError {
+                errorBanner(claimError)
+            }
+        }
+        .padding(.vertical, 18)
     }
 
     // MARK: Chrome

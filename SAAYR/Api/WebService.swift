@@ -75,6 +75,9 @@ class WebService {
     static func bossWaitlist(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/waitlist" }
     static func bossWaitlistStream(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/waitlist/stream" }
     static func bossRewards(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/rewards" }
+    /// Acknowledges the reward and drops the ended boss out of the challenges
+    /// payload. Idempotent — claiming twice is not an error.
+    static func bossClaimRewards(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/rewards/claim" }
 
     // MARK: - User
     static var profile       = baseUrl + "user/profile"

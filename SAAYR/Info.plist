@@ -6,6 +6,8 @@
 	<array>
 		<string>com.saayr.app.steps.sync</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
 	<key>UIBackgroundModes</key>

@@ -462,9 +462,9 @@ struct BossHomeBannerCard: View {
     }
 
     private var headline: String {
-        if banner.state == .live {
-            return isEnglish ? "Boss LIVE — join now!" : "!المعركة مباشرة — انضم الآن"
-        }
+        // The same line in both states: the live badge and countdown in
+        // liveDetail already say it's running, so the headline is free to be
+        // the one thing they don't carry — who the player is fighting.
         guard let name = banner.boss_name else {
             return isEnglish ? "Boss event incoming" : "معركة قادمة"
         }
@@ -614,8 +614,8 @@ struct BossChallengeCard: View {
             return isEnglish ? "🎁 View your rewards" : "🎁 اعرض مكافآتك"
         default:
             return boss.user_on_waitlist == true
-                ? (isEnglish ? "✓ Reminder set" : "✓ تم ضبط التذكير")
-                : (isEnglish ? "🔔 Remind me" : "🔔 ذكّرني")
+                ? (isEnglish ? "✓ Joined" : "✓ انضممت")
+                : (isEnglish ? "Join" : "انضم")
         }
     }
 

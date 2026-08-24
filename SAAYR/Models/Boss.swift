@@ -240,9 +240,13 @@ struct UserBattleStats: Decodable, Sendable {
     let rank: Int
     /// False until the player lands their first hit.
     let is_participant: Bool
+    /// Where `damage_dealt` came from, per weapon. Optional so a server that
+    /// hasn't shipped the field yet decodes into the rest of the struct rather
+    /// than failing the whole event.
+    let damage_breakdown: DamageBreakdown?
 
     private enum CodingKeys: String, CodingKey {
-        case damage_dealt, contribution_percent, rank, is_participant
+        case damage_dealt, contribution_percent, rank, is_participant, damage_breakdown
     }
 
     init(from decoder: Decoder) throws {
@@ -252,6 +256,7 @@ struct UserBattleStats: Decodable, Sendable {
             (try? c.decodeIfPresent(Double.self, forKey: .contribution_percent)) ?? 0
         rank = (try? c.decodeIfPresent(Int.self, forKey: .rank)) ?? 0
         is_participant = (try? c.decodeIfPresent(Bool.self, forKey: .is_participant)) ?? false
+        damage_breakdown = try? c.decodeIfPresent(DamageBreakdown.self, forKey: .damage_breakdown)
     }
 
     static let empty = UserBattleStats(damage_dealt: 0, contribution_percent: 0, rank: 0, is_participant: false)
@@ -261,6 +266,29 @@ struct UserBattleStats: Decodable, Sendable {
         self.contribution_percent = contribution_percent
         self.rank = rank
         self.is_participant = is_participant
+        self.damage_breakdown = nil
+    }
+}
+
+/// Damage the player has dealt with each weapon, as scored by the server.
+/// Unlike the weapon cards — which carry per-hit values and a use count — these
+/// are real totals, so they already account for caps and bonuses.
+struct DamageBreakdown: Decodable, Sendable {
+    let checkin: Int
+    let partner_checkin: Int
+    let steps: Int
+    let voucher: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case checkin, partner_checkin, steps, voucher
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        checkin = (try? c.decodeIfPresent(Int.self, forKey: .checkin)) ?? 0
+        partner_checkin = (try? c.decodeIfPresent(Int.self, forKey: .partner_checkin)) ?? 0
+        steps = (try? c.decodeIfPresent(Int.self, forKey: .steps)) ?? 0
+        voucher = (try? c.decodeIfPresent(Int.self, forKey: .voucher)) ?? 0
     }
 }
 
@@ -399,8 +427,8 @@ struct BossRewardUserStats: Decodable, Sendable {
 
 struct BossRewardDetail: Decodable, Sendable {
     let xp_earned: Int
-    /// Placeholders on the backend today — always false / null. The XP is
-    /// granted regardless; these exist for a claim flow that isn't built yet.
+    /// Set once the player collects. Optional because the same struct decodes
+    /// the rewards payload, where a not-yet-collected reward may omit them.
     let claimed: Bool?
     let claimed_at: String?
 }

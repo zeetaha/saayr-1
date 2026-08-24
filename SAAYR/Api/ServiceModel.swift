@@ -69,6 +69,25 @@ class ServiceModel {
     }
 
     // MARK: - POST Request
+    /// Like `postRequest`, but hands back the response body on failure too.
+    ///
+    /// `.validate()` turns a non-2xx into an `AFError`, which carries the
+    /// status code but not the body — so the server's own explanation is lost
+    /// before the caller sees it. Screens that show the server's message
+    /// rather than a generic one need this variant.
+    func postRequestReportingBody(
+        endpoint: String,
+        parameters: [String: Any]? = nil,
+        completion: @escaping (Result<Data, AFError>, Data?, Int?) -> Void
+    ) {
+        session.request(endpoint, method: .post, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
+            .validate()
+            .responseData { [weak self] response in
+                self?.checkForBlockedAccount(response: response)
+                completion(response.result, response.data, response.response?.statusCode)
+            }
+    }
+
     func postRequest(endpoint: String, parameters: [String: Any]? = nil, completion: @escaping (Result<Data, AFError>) -> Void) {
         session.request(endpoint, method: .post, parameters: parameters, encoding: JSONEncoding.default, headers: getHeader())
             .validate()
