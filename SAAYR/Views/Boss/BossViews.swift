@@ -41,16 +41,44 @@ enum BossStyle {
 /// here — a raid countdown is meant to feel like a clock running out.
 struct BossCountdownText: View {
     let deadline: Date
-    var monospaced: Bool = true
+    let isEnglish: Bool
+    /// Optional label above the digits — "starts in", "ends in". Owned here
+    /// rather than by the caller because it has to disappear together with
+    /// the digits: "starts in / Waiting…" says two different things at once.
+    var caption: String? = nil
+    var captionAlignment: HorizontalAlignment = .trailing
 
     @State private var remaining: Int = 0
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Text(Self.format(remaining))
-            .monospacedDigit()
-            .onAppear { remaining = Self.secondsLeft(to: deadline) }
-            .onReceive(tick) { _ in remaining = Self.secondsLeft(to: deadline) }
+        VStack(alignment: captionAlignment, spacing: 2) {
+            // The clock running out doesn't mean the state has changed — the
+            // server decides that, and it lands a moment later over the
+            // stream. "00:00:00" reads as a stuck screen in that gap; this
+            // says the app is waiting on something, which is the truth.
+            if remaining <= 0 {
+                Text(Self.waitingText(isEnglish: isEnglish))
+            } else {
+                if let caption {
+                    // Explicit font and colour so they survive whatever the
+                    // call site applies to the countdown itself.
+                    Text(caption)
+                        .font(.system(size: 9))
+                        .foregroundColor(BossStyle.textDim)
+                }
+                Text(Self.format(remaining))
+                    .monospacedDigit()
+            }
+        }
+        .onAppear { remaining = Self.secondsLeft(to: deadline) }
+        .onReceive(tick) { _ in remaining = Self.secondsLeft(to: deadline) }
+    }
+
+    /// Matches `BossStartsInLabel`, which reaches the same state by its own
+    /// route — the two must not disagree on what waiting is called.
+    static func waitingText(isEnglish: Bool) -> String {
+        isEnglish ? "Waiting…" : "…في الانتظار"
     }
 
     private static func secondsLeft(to date: Date) -> Int {
@@ -82,36 +110,25 @@ struct BossStartsInLabel: View {
     let startsAt: Date?
     let isEnglish: Bool
 
-    @State private var hasStarted = false
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
     var body: some View {
-        Group {
-            if let startsAt, !hasStarted {
-                HStack(spacing: 4) {
-                    Text(isEnglish ? "starts in" : "يبدأ خلال")
-                        .font(.system(size: 11))
-                        .foregroundColor(BossStyle.textDim)
-
-                    BossCountdownText(deadline: startsAt)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(BossStyle.ember)
-                }
-            } else {
-                // Also the no-start-time case: a scheduled boss the server
-                // hasn't given a time for is waiting on exactly the same
-                // thing, and "starts in —" says less.
-                Text(isEnglish ? "Waiting…" : "…في الانتظار")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(BossStyle.textDim)
-            }
+        if let startsAt {
+            // The countdown owns the switch to "Waiting…" now, so there's no
+            // second clock here to disagree with it about when zero happened.
+            BossCountdownText(
+                deadline: startsAt,
+                isEnglish: isEnglish,
+                caption: isEnglish ? "starts in" : "يبدأ خلال",
+                captionAlignment: .leading
+            )
+            .font(.system(size: 11, weight: .bold))
+            .foregroundColor(BossStyle.ember)
+        } else {
+            // A scheduled boss the server hasn't given a time for is waiting
+            // on exactly the same thing, and "starts in —" says less.
+            Text(BossCountdownText.waitingText(isEnglish: isEnglish))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(BossStyle.textDim)
         }
-        .onAppear(perform: refresh)
-        .onReceive(tick) { _ in refresh() }
-    }
-
-    private func refresh() {
-        hasStarted = (startsAt?.timeIntervalSinceNow ?? 0) <= 0
     }
 }
 
@@ -476,7 +493,7 @@ struct BossHomeBannerCard: View {
             HStack(spacing: 6) {
                 BossLivePill()
                 if let ends = banner.endsAtDate {
-                    BossCountdownText(deadline: ends)
+                    BossCountdownText(deadline: ends, isEnglish: isEnglish)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(BossStyle.textDim)
                 }
@@ -568,7 +585,7 @@ struct BossChallengeCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "hourglass")
                             .font(.system(size: 9))
-                        BossCountdownText(deadline: starts)
+                        BossCountdownText(deadline: starts, isEnglish: isEnglish)
                             .font(.system(size: 10, weight: .bold))
                     }
                     .foregroundColor(BossStyle.ember)

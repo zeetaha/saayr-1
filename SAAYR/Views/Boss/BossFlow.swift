@@ -140,6 +140,14 @@ struct BossFlowPresenter: ViewModifier {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                             self.toast = .success(message)
                         }
+                    },
+                    onBlocked: { reason in
+                        // Same shape as onCollected: dismiss first, then let
+                        // the reason land once the cover is out of the way.
+                        self.destination = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            self.toast = .error(reason)
+                        }
                     }
                 )
             }

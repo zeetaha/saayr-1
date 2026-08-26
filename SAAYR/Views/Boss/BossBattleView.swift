@@ -263,7 +263,6 @@ struct BossBattleView: View {
                 bossCard(battle)
                 statTiles(model.userStats)
                 damageBreakdown(model.userStats, weapons: battle.weapons)
-                weapons(battle.weapons)
 
                 // Leaderboard above the feed: standings are what the player
                 // is here to move, and burying them under a scrolling feed
@@ -292,7 +291,7 @@ struct BossBattleView: View {
             HStack(spacing: 4) {
                 Image(systemName: "timer")
                     .font(.system(size: 11))
-                BossCountdownText(deadline: model.deadline)
+                BossCountdownText(deadline: model.deadline, isEnglish: isEnglish)
                     .font(.system(size: 12, weight: .bold))
             }
             .foregroundColor(BossStyle.textDim)
@@ -402,7 +401,7 @@ struct BossBattleView: View {
         let total = rows.reduce(0) { $0 + $1.damage }
 
         return VStack(alignment: .leading, spacing: 8) {
-            Text(isEnglish ? "YOUR DAMAGE" : "ضررك")
+            Text(isEnglish ? "WEAPONS & DAMAGES" : "الأسلحة والأضرار")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.8)
                 .foregroundColor(BossStyle.textDim)
@@ -506,140 +505,6 @@ struct BossBattleView: View {
         }
 
         return rows
-    }
-
-    // MARK: Weapons
-
-    private func weapons(_ weapons: BossWeapons) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(isEnglish ? "YOUR WEAPONS" : "أسلحتك")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.8)
-                .foregroundColor(BossStyle.textDim)
-
-            checkInWeapon(weapons.checkin)
-
-            // Its own row rather than a chip on the check-in row: it carries
-            // its own damage, used count and nearest location, none of which
-            // fit in another row's subtitle.
-            if let partner = weapons.partner_checkin {
-                partnerCheckInWeapon(partner)
-            }
-
-            stepsWeapon(weapons.steps)
-
-            // Hidden rather than shown as zero when the admin hasn't
-            // configured voucher damage for this boss.
-            if let damage = weapons.voucher.damage {
-                voucherWeapon(weapons.voucher, damage: damage)
-            }
-
-        }
-    }
-
-    private func checkInWeapon(_ weapon: WeaponCheckin) -> some View {
-        weaponRow(
-            icon: "📍",
-            title: damageTitle(
-                base: isEnglish ? "Check in" : "تسجيل حضور",
-                damage: weapon.damage,
-                // Only a fallback now: when the server sends partner check-in
-                // as its own weapon it gets a row of its own instead.
-                extra: weapon.partner_damage.map {
-                    isEnglish ? "partner ~\($0)" : "شريك ~\($0)"
-                }
-            ),
-            subtitle: weaponSubtitle(nearestText(weapon), usedCount: weapon.used_count)
-        )
-    }
-
-    private func partnerCheckInWeapon(_ weapon: WeaponCheckin) -> some View {
-        weaponRow(
-            icon: "🤝",
-            title: damageTitle(
-                base: isEnglish ? "Check in at a partner" : "تسجيل حضور لدى شريك",
-                damage: weapon.damage
-            ),
-            subtitle: weaponSubtitle(nearestText(weapon), usedCount: weapon.used_count)
-        )
-    }
-
-    private func stepsWeapon(_ weapon: WeaponSteps) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Text("👟").font(.system(size: 18))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(damageTitle(
-                        base: isEnglish ? "Steps" : "خطوات",
-                        damage: weapon.damage_per_250
-                    ))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(BossStyle.textPrimary)
-
-                    Text(stepsSubtitle(weapon))
-                        .font(.system(size: 11))
-                        .foregroundColor(BossStyle.textDim)
-                }
-                Spacer(minLength: 0)
-            }
-
-            // Walking has no button — it's counted in the background, so the
-            // bar is the whole interaction.
-            if let progress = weapon.progress {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.10))
-                        Capsule()
-                            .fill(BossStyle.gold)
-                            .frame(width: geo.size.width * progress)
-                    }
-                }
-                .frame(height: 6)
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(BossStyle.surface))
-    }
-
-    private func voucherWeapon(_ weapon: WeaponVoucher, damage: Int) -> some View {
-        weaponRow(
-            icon: "🎟️",
-            title: isEnglish ? "Redeem voucher ~\(damage)" : "استبدل قسيمة ~\(damage)",
-            subtitle: weaponSubtitle(
-                isEnglish
-                    ? "At any partner inside the zone"
-                    : "لدى أي شريك داخل المنطقة",
-                usedCount: weapon.used_count
-            )
-        )
-    }
-
-    /// Informational only, like the steps row. A weapon says what it does and
-    /// what it's worth; the player performs it out in the world, not from here.
-    private func weaponRow(
-        icon: String,
-        title: String,
-        subtitle: String?
-    ) -> some View {
-        HStack(spacing: 10) {
-            Text(icon).font(.system(size: 18))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(BossStyle.textPrimary)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundColor(BossStyle.textDim)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(BossStyle.surface))
     }
 
     // MARK: Leaderboard & feed
@@ -815,48 +680,4 @@ struct BossBattleView: View {
         }
     }
 
-    // MARK: Copy helpers
-
-    /// "Check in ~30 · partner ~50" — the tilde is doing real work: the server
-    /// applies level and streak modifiers, so these are indicative, not exact.
-    private func damageTitle(base: String, damage: Int?, extra: String? = nil) -> String {
-        var text = base
-        if let damage { text += " ~\(damage)" }
-        if let extra { text += " · \(extra)" }
-        return text
-    }
-
-    /// Appends "used 1x" to a weapon's subtitle. Silent at zero — a weapon
-    /// the player hasn't used yet reads better without a count on it.
-    private func weaponSubtitle(_ base: String?, usedCount: Int) -> String? {
-        guard usedCount > 0 else { return base }
-        let used = isEnglish ? "used \(usedCount)x" : "استُخدم \(usedCount) مرة"
-        guard let base else { return used }
-        return "\(base) · \(used)"
-    }
-
-    /// Walking is passive, so this line has to carry the whole story: how much
-    /// it has already contributed and whether it's maxed out for this boss.
-    private func stepsSubtitle(_ weapon: WeaponSteps) -> String {
-        let steps = "\(weapon.steps_counted.formatted()) \(isEnglish ? "steps" : "خطوة")"
-
-        guard let cap = weapon.max_damage, cap > 0 else {
-            guard weapon.damage_dealt > 0 else { return steps }
-            return "\(steps) · \(weapon.damage_dealt) \(isEnglish ? "dmg" : "ضرر")"
-        }
-
-        if weapon.damage_dealt >= cap {
-            return "\(steps) · \(isEnglish ? "max reached" : "بلغت الحد الأقصى")"
-        }
-        return "\(steps) · \(weapon.damage_dealt)/\(cap) \(isEnglish ? "dmg" : "ضرر")"
-    }
-
-    private func nearestText(_ weapon: WeaponCheckin) -> String? {
-        guard let name = weapon.nearest_location_name else {
-            // Only ever nil when the screen loaded without a location fix.
-            return isEnglish ? "Nearest location loading…" : "…جارٍ تحديد أقرب مكان"
-        }
-        guard let metres = weapon.nearest_location_distance_m else { return name }
-        return "\(name) · \(Int(metres.rounded())) m"
-    }
 }

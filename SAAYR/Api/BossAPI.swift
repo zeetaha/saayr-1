@@ -214,6 +214,15 @@ struct BossAPIError: Error {
     /// player's side — a retry after a dropped response must not look broken.
     var isAlreadyClaimed: Bool { status == 409 }
 
+    /// The server has no reward record for this player — they never landed a
+    /// hit, so there is nothing here to collect. An outcome, not a fault:
+    /// staying on the screen offers nothing to fix.
+    ///
+    /// Distinct from a 400, which is a refusal *with* a reason the player can
+    /// sometimes act on (nothing earned, flagged, banned) and so keeps the
+    /// screen open to show it.
+    var isNothingToCollect: Bool { status == 404 }
+
     /// The server's own words, when it sent any.
     var serverMessage: String? {
         guard let body,

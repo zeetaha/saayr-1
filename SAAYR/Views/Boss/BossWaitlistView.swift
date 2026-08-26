@@ -317,14 +317,13 @@ struct BossWaitlistView: View {
                 Spacer(minLength: 0)
 
                 if let startsAt {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(isEnglish ? "starts in" : "يبدأ خلال")
-                            .font(.system(size: 9))
-                            .foregroundColor(BossStyle.textDim)
-                        BossCountdownText(deadline: startsAt)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(BossStyle.ember)
-                    }
+                    BossCountdownText(
+                        deadline: startsAt,
+                        isEnglish: isEnglish,
+                        caption: isEnglish ? "starts in" : "يبدأ خلال"
+                    )
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(BossStyle.ember)
                 }
             }
 

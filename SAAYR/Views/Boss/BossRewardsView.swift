@@ -17,6 +17,9 @@ struct BossRewardsView: View {
     /// confirmation has to outlive this screen — it's shown by the host, after
     /// this one has gone.
     let onCollected: (_ xpEarned: Int?) -> Void
+    /// Refused for a reason worth reading. Closes the screen like `onClose`,
+    /// but carries the server's wording out so it isn't lost with it.
+    let onBlocked: (_ reason: String) -> Void
 
     @EnvironmentObject private var userManager: UserManager
 
@@ -210,6 +213,20 @@ struct BossRewardsView: View {
             // that actually worked.
             case .failure(let error) where error.isAlreadyClaimed:
                 collected(xp: rewards?.rewards?.xp_earned)
+            // Nothing to collect — close either way, because nothing on this
+            // screen can change the answer. Whether the player is told why
+            // depends on what they were trying to do: someone who tapped
+            // Dismiss on "you didn't join this one" already knows, while
+            // someone who tapped Collect and got no record is owed the
+            // server's reason, carried out to the host so it survives the
+            // screen closing. No success toast either way: nothing was
+            // collected.
+            case .failure(let error) where error.isNothingToCollect:
+                if rewards?.rewards == nil {
+                    onClose()
+                } else {
+                    onBlocked(error.displayMessage(isEnglish: isEnglish))
+                }
             case .failure(let error):
                 // The server's own wording, not a generic retry line — it's
                 // the only thing that tells the player what actually stopped
