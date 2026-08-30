@@ -4,9 +4,29 @@ struct PetSelectionView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var languageManager: LanguageManager
     @State private var petName: String = ""
-    
-    // Floating particles
+    @State private var showValidation: Bool = false
+
     let particles = ["🦅", "🔥", "⚡", "👑"]
+
+    private var validationError: String? {
+        if petName.count < 2 {
+            return languageManager.currentLanguage == .english
+                ? "Name must be at least 2 characters."
+                : "يجب أن يحتوي الاسم على حرفين على الأقل."
+        }
+        if petName.contains(" ") {
+            return languageManager.currentLanguage == .english
+                ? "Spaces are not allowed in a falcon name."
+                : "لا يُسمح باستخدام المسافات في اسم الصقر."
+        }
+        let allowed = CharacterSet.letters.union(.decimalDigits)
+        if petName.unicodeScalars.contains(where: { !allowed.contains($0) }) {
+            return languageManager.currentLanguage == .english
+                ? "Only letters and numbers are allowed (no special characters)."
+                : "يُسمح فقط بالحروف والأرقام، دون رموز خاصة."
+        }
+        return nil
+    }
     
     var body: some View {
         ZStack {
@@ -39,11 +59,11 @@ struct PetSelectionView: View {
                         
                         Text(languageManager.currentLanguage == .english ?
                              "Choose a name for your falcon companion.\nIt will grow with you on your journey!" :
-                             "اختر اسمًا لصقر رفيقك.\nسينمو معك في رحلتك!")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(4)
+                                "اختر اسمًا لصقر رفيقك.\nسينمو معك في رحلتك!")
+                        .font(.system(size: 16))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
                     }
                     .padding(.horizontal)
                     
@@ -63,12 +83,30 @@ struct PetSelectionView: View {
                                 .padding(.vertical, 16)
                                 .background(
                                     RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color(hex: "#EC4899"), lineWidth: 2)
+                                        .stroke(
+                                            showValidation && validationError != nil ? Color.red : Color(hex: "#EC4899"),
+                                            lineWidth: showValidation && validationError != nil ? 1.5 : 2
+                                        )
                                 )
                                 .foregroundColor(.black)
+                                .autocapitalization(.none)
+                                .autocorrectionDisabled()
                                 .onChange(of: petName) { newValue in
                                     if newValue.count > 20 { petName = String(newValue.prefix(20)) }
+                                    authManager.errorMessage = nil
                                 }
+
+                            // Inline client-side validation error
+                            if showValidation, let err = validationError {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 12))
+                                    Text(err)
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundColor(.red)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
                         }
                         
                         // Warning Note
@@ -76,39 +114,63 @@ struct PetSelectionView: View {
                             Text("⚠️")
                             Text(languageManager.currentLanguage == .english ?
                                  "Note: You won't be able to change the name later" :
-                                 "ملاحظة: لن تتمكن من تغيير الاسم لاحقًا")
-                                .font(.system(size: 13))
-                                .foregroundColor(Color(hex: "#BE123C"))
+                                    "ملاحظة: لن تتمكن من تغيير الاسم لاحقًا")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color(hex: "#BE123C"))
                         }
                         .padding(12)
                         .background(Color(hex: "#FFF1F2"))
                         .cornerRadius(12)
                         
+                        // Server-side error (e.g. name already taken)
+                        if let message = authManager.errorMessage {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.system(size: 14))
+                                Text(message)
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.red)
+                        }
+
                         // Start Journey Button
                         Button(action: {
-                            guard petName.count >= 2 else { return }
-
-                                authManager.tempPetName = petName
-                                authManager.completeSetup()
+                            withAnimation { showValidation = true }
+                            guard validationError == nil else { return }
+                            authManager.tempPetName = petName
+                            authManager.completeSetup()
                         }) {
-                            HStack {
-                                Text(languageManager.currentLanguage == .english ? "Start Your Journey" : "ابدأ رحلتك")
-                                    .font(.system(size: 18, weight: .bold))
-                                Image(systemName: "arrow.forward")
+                            Group {
+                                if authManager.isLoading {
+                                    HStack(spacing: 8) {
+                                        ProgressView().tint(Color(hex: "#EC4899"))
+                                        Text(languageManager.currentLanguage == .english ? "Setting up..." : "جاري الإعداد...")
+                                            .font(.system(size: 18, weight: .bold))
+                                    }
+                                    .foregroundColor(Color(hex: "#EC4899"))
+                                } else {
+                                    HStack {
+                                        Text(languageManager.currentLanguage == .english ? "Start Your Journey" : "ابدأ رحلتك")
+                                            .font(.system(size: 18, weight: .bold))
+                                        Image(systemName: "arrow.forward")
+                                    }
+                                    .foregroundColor(.white)
+                                }
                             }
-                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
-                            .background(Color(hex: "#EC4899"))
+                            .background(authManager.isLoading ? Color.white : Color(hex: "#EC4899"))
                             .cornerRadius(16)
                         }
-                        .disabled(petName.count < 2)
-                        .opacity(petName.count < 2 ? 0.6 : 1)
+                        .disabled(authManager.isLoading)
+                        .opacity(authManager.isLoading ? 0.6 : 1)
                     }
                     .padding(24)
                     .background(Color.white.opacity(0.9))
                     .cornerRadius(24)
                     .padding(.horizontal, 24)
+                    
+                    
                     
                     Spacer(minLength: 40)
                 }

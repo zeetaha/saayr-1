@@ -1,37 +1,46 @@
 import Foundation
 
 struct UserData: Codable {
-    var fullName: String
-    var email: String
-    var phoneNumber: String
-    var petName: String
-    var petType: String
+    var fullName: String?
+    var email: String?
+    var phoneNumber: String?
+    var petName: String?
+    var petType: String?
     var totalXP: Int
     var checkInStreak: Int
+    var pvpWins: Int
+    var rewards: Int?
     var checkInLogs: [CheckInLog]
+    var city: String?       // <-- add this
     var transactions: [Transaction]
     var achievements: [Achievement]
     var groups: [String] // Group IDs
     
-    var level: Int {
-        LevelSystem.getLevelFromXP(totalXP)
-    }
+    var pvp_enabled : Bool = false
+    var pvp_message : String = ""
     
-    var points: Int {
-        LevelSystem.calculatePointsFromXP(totalXP)
-    }
+    var level: Int?
+    var userLevel: Int?
     
+    var points: Int
+    var pet_stage: Int
+    
+    var text_of_progress : String
+    var current_percentage : Double?
+    var gif_url: String?
+    var greeting_en: String?
+    var greeting_ar: String?
+
     var petStage: PetStage {
-        LevelSystem.getPetStage(level)
+        LevelSystem.getPetStage(pet_stage)
     }
     
     var xpProgress: XPProgress {
         LevelSystem.getXPProgressToNextLevel(totalXP)
     }
-    
-    var totalSpent: Double {
-        transactions.reduce(0) { $0 + $1.amount }
-    }
+
+
+
 }
 
 struct CheckInLog: Codable, Identifiable {
@@ -49,7 +58,7 @@ struct Transaction: Codable, Identifiable {
     let category: String
     let timestamp: Date
     let xpAwarded: Int
-    let pointsAwarded: Int
+    var pointsAwarded: Int
     let isPartner: Bool
     let multiplier: Int
 }
@@ -127,3 +136,49 @@ enum PetStage: String, Codable {
         }
     }
 }
+
+extension UserData {
+    static func fromProfile(_ profile: UserProfileResponse) -> UserData {
+        return UserData(
+            fullName: profile.fullName,
+            email: profile.email,
+            phoneNumber: "", // API doesn't provide phone, default to empty
+            petName: profile.falconName ?? "Falcon",
+            petType: "0", // Or map if API provides
+            totalXP: profile.totalXP,
+            checkInStreak: 0,
+            pvpWins:0, // Default or map if API provides
+            rewards: profile.rewards,
+            checkInLogs: [],
+            city: profile.city,
+            transactions: [],
+            achievements: [],
+            groups: [], points: 0, pet_stage: 0,text_of_progress: "",current_percentage: 0.0
+        )
+    }
+
+    static func fromProfileAndDashboard(profile: UserProfileResponse, dashboard: DashboardResponse) -> UserData {
+        return UserData(
+            fullName: profile.fullName,
+            email: profile.email,
+            phoneNumber: "", // API doesn't provide phone, default to empty
+            petName: profile.falconName ?? "Falcon",
+            petType: "\(dashboard.total_points)",
+            totalXP: dashboard.total_xp,
+            checkInStreak: dashboard.total_checkins,
+            pvpWins:dashboard.pvp_wins,
+            rewards: dashboard.rewards,
+            checkInLogs: [],
+            city: profile.city,
+            transactions: [],
+            achievements: [],
+            groups: [],
+            pvp_enabled: dashboard.pvp_enabled,
+            pvp_message: dashboard.pvp_message, level : dashboard.pet_stage, userLevel: dashboard.user_level, points: dashboard.total_xp, pet_stage: dashboard.pet_stage, text_of_progress: dashboard.text_of_progress ?? "",current_percentage: dashboard.current_percentage ?? 0.0,
+            gif_url: dashboard.gif_url,
+            greeting_en: dashboard.greeting_en,
+            greeting_ar: dashboard.greeting_ar
+        )
+    }
+}
+

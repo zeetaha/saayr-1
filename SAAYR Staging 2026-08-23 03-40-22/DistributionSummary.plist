@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Saayr.ipa</key>
+	<array>
+		<dict>
+			<key>architectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>buildNumber</key>
+			<string>1</string>
+			<key>certificate</key>
+			<dict>
+				<key>SHA1</key>
+				<string>08D97476DCA986A85A8D05085940C5165CEAC196</string>
+				<key>dateExpires</key>
+				<string>26/02/2027</string>
+				<key>type</key>
+				<string>Cloud Managed Apple Distribution</string>
+			</dict>
+			<key>embeddedBinaries</key>
+			<array>
+				<dict>
+					<key>architectures</key>
+					<array>
+						<string>arm64</string>
+					</array>
+					<key>buildNumber</key>
+					<string>24.25.0</string>
+					<key>certificate</key>
+					<dict>
+						<key>SHA1</key>
+						<string>08D97476DCA986A85A8D05085940C5165CEAC196</string>
+						<key>dateExpires</key>
+						<string>26/02/2027</string>
+						<key>type</key>
+						<string>Cloud Managed Apple Distribution</string>
+					</dict>
+					<key>name</key>
+					<string>MapboxCommon.framework</string>
+					<key>team</key>
+					<dict>
+						<key>id</key>
+						<string>X4KTHW6XMR</string>
+						<key>name</key>
+						<string>Saayr Rewards Company LLC</string>
+					</dict>
+					<key>versionNumber</key>
+					<string>24.25.0</string>
+				</dict>
+				<dict>
+					<key>architectures</key>
+					<array>
+						<string>arm64</string>
+					</array>
+					<key>buildNumber</key>
+					<string>11.25.0</string>
+					<key>certificate</key>
+					<dict>
+						<key>SHA1</key>
+						<string>08D97476DCA986A85A8D05085940C5165CEAC196</string>
+						<key>dateExpires</key>
+						<string>26/02/2027</string>
+						<key>type</key>
+						<string>Cloud Managed Apple Distribution</string>
+					</dict>
+					<key>name</key>
+					<string>MapboxCoreMaps.framework</string>
+					<key>team</key>
+					<dict>
+						<key>id</key>
+						<string>X4KTHW6XMR</string>
+						<key>name</key>
+						<string>Saayr Rewards Company LLC</string>
+					</dict>
+					<key>versionNumber</key>
+					<string>11.25.0</string>
+				</dict>
+				<dict>
+					<key>architectures</key>
+					<array>
+						<string>arm64</string>
+					</array>
+					<key>buildNumber</key>
+					<string>38</string>
+					<key>certificate</key>
+					<dict>
+						<key>SHA1</key>
+						<string>08D97476DCA986A85A8D05085940C5165CEAC196</string>
+						<key>dateExpires</key>
+						<string>26/02/2027</string>
+						<key>type</key>
+						<string>Cloud Managed Apple Distribution</string>
+					</dict>
+					<key>name</key>
+					<string>Turf.framework</string>
+					<key>team</key>
+					<dict>
+						<key>id</key>
+						<string>X4KTHW6XMR</string>
+						<key>name</key>
+						<string>Saayr Rewards Company LLC</string>
+					</dict>
+					<key>versionNumber</key>
+					<string>4.0.0</string>
+				</dict>
+			</array>
+			<key>entitlements</key>
+			<dict>
+				<key>application-identifier</key>
+				<string>X4KTHW6XMR.com.saayr.app.staging</string>
+				<key>aps-environment</key>
+				<string>production</string>
+				<key>com.apple.developer.healthkit</key>
+				<true/>
+				<key>com.apple.developer.healthkit.background-delivery</key>
+				<true/>
+				<key>com.apple.developer.in-app-payments</key>
+				<array>
+					<string>merchant.com.saayr.app</string>
+				</array>
+				<key>com.apple.developer.team-identifier</key>
+				<string>X4KTHW6XMR</string>
+				<key>get-task-allow</key>
+				<false/>
+			</dict>
+			<key>name</key>
+			<string>Saayr.app</string>
+			<key>profile</key>
+			<dict>
+				<key>UUID</key>
+				<string>49ed9512-d4f7-419b-b696-404d629f7a66</string>
+				<key>dateExpires</key>
+				<string>11/06/2027</string>
+				<key>name</key>
+				<string>iOS Team Ad Hoc Provisioning Profile: com.saayr.app.staging</string>
+			</dict>
+			<key>team</key>
+			<dict>
+				<key>id</key>
+				<string>X4KTHW6XMR</string>
+				<key>name</key>
+				<string>Saayr Rewards Company LLC</string>
+			</dict>
+			<key>versionNumber</key>
+			<string>1.0.7</string>
+		</dict>
+	</array>
+</dict>
+</plist>

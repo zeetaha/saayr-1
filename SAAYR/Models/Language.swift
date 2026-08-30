@@ -68,6 +68,7 @@ struct Translations {
         "settings.language": "Language",
         "settings.privacy": "Privacy & Security",
         "settings.privacyPolicy": "Privacy Policy",
+        "settings.termsAndConditions": "Terms & Conditions",
         "settings.changePassword": "Change Password",
         "settings.about": "About",
         "settings.aboutSaayr": "About Saayr",
@@ -108,6 +109,8 @@ struct Translations {
         "map.title": "Map",
         "map.nearbyLocations": "Nearby Locations",
         "map.checkIn": "Check In",
+        "map.king": "King",
+        "map.dethroned": "You've been dethroned at %@!",
         
         // PVP
         "pvp.title": "Battle Arena",
@@ -123,6 +126,12 @@ struct Translations {
         "common.done": "Done",
         "common.loading": "Loading...",
         "common.confirm": "Confirm",
+        
+        //legal
+        "legal.agreeText": "By continuing, you agree to our",
+        "legal.and": "&",
+        "legal.terms": "Terms of Service",
+        "legal.privacy": "Privacy Policy"
     ]
     
     static let arabic: [String: String] = [
@@ -162,6 +171,7 @@ struct Translations {
         "settings.language": "اللغة",
         "settings.privacy": "الخصوصية والأمان",
         "settings.privacyPolicy": "سياسة الخصوصية",
+        "settings.termsAndConditions": "الشروط والأحكام",
         "settings.changePassword": "تغيير كلمة المرور",
         "settings.about": "حول",
         "settings.aboutSaayr": "حول سيّار",
@@ -201,6 +211,8 @@ struct Translations {
         "map.title": "الخريطة",
         "map.nearbyLocations": "المواقع القريبة",
         "map.checkIn": "تسجيل الحضور",
+        "map.king": "الملك",
+        "map.dethroned": "!تم خلعك من موقع %@",
         
         // PVP
         "pvp.title": "ساحة المعركة",
@@ -216,5 +228,11 @@ struct Translations {
         "common.done": "تم",
         "common.loading": "...جارٍ التحميل",
         "common.confirm": "تأكيد",
+        
+        //legal
+        "legal.agreeText": "بالمتابعة، أنت توافق على",
+        "legal.and": "و",
+        "legal.terms": "الشروط والأحكام",
+        "legal.privacy": "سياسة الخصوصية"
     ]
 }

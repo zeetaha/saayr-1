@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Alamofire
 
 enum AuthState {
     case onboarding
@@ -23,6 +24,8 @@ class AuthManager: ObservableObject {
     @Published var otpCode: String = ""
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var isBlockedAlert: Bool = false
+    @Published var blockedMessage: String = "Your account has been blocked. Please contact support."
     
     // Temporary storage for profile setup
     @Published var tempFullName: String = ""
@@ -43,10 +46,39 @@ class AuthManager: ObservableObject {
         } else {
             self.authState = .onboarding
         }
+
+        NotificationCenter.default.addObserver(
+            forName: .userAccountBlocked,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            self.logout()
+            self.blockedMessage = notification.object as? String
+                ?? "Your account has been blocked. Please contact support."
+            self.isBlockedAlert = true
+        }
+
+        // Session expired (refresh token returned 401) — force logout
+        NotificationCenter.default.addObserver(
+            forName: .sessionExpired,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.logout()
+            self.errorMessage = "Session expired. Please log in again."
+        }
+
+        // Migration: existing users have no refresh_token stored in Keychain.
+        // If they have an old UserDefaults token but no Keychain token,
+        // force them to re‑authenticate so a refresh token is captured.
+        if TokenManager.shared.accessToken == nil,
+           UserModel.shared.user?.accessToken != nil {
+            logout()
+        }
     }
-    
-    
-    
+
     func sendOTP() {
         isLoading = true
         otp = nil
@@ -55,6 +87,11 @@ class AuthManager: ObservableObject {
         let parameters: [String: Any] = [
             "phone_number": "966" + phoneNumber
         ]
+        
+        print("➡️ Auth State:", self.authState)
+        print("➡️ Endpoint:", self.authState == .forgotPasscode
+              ? WebService.forgotPasscode
+              : WebService.sendOtp)
         
         ServiceModel.shared.postRequest(endpoint: self.authState == .forgotPasscode ? WebService.forgotPasscode : WebService.sendOtp ,
                                         parameters: parameters) { result in
@@ -66,16 +103,16 @@ class AuthManager: ObservableObject {
                     do {
                         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                             
+                            // Production: OTP is sent via SMS, response likely has
+                            // `{"success": true}` with no `otp` key.
                             if let otp = json["otp"] as? String {
                                 self.otp = otp
-                                print("✅ OTP:", otp)
-                                self.authState = self.authState == .forgotPasscode ? .resetPasscode : .otpVerification
-                                
-                                
-                            } else {
-                                self.errorMessage = json["message"] as? String ?? "Unexpected response"
-                                print("❌ Error:", self.errorMessage ?? "")
+                                print("✅ OTP (dev):", otp)
                             }
+                            // Any successful response → go to OTP input
+                            self.authState = self.authState == .forgotPasscode ? .resetPasscode : .otpVerification
+                            print("➡️ Navigating to OTP screen")
+                            
                         }
                     } catch {
                         self.errorMessage = error.localizedDescription
@@ -83,14 +120,18 @@ class AuthManager: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                    // 403 = blocked account — the ServiceModel notification already
+                    // triggers isBlockedAlert, so don't overwrite with Alamofire's
+                    // generic "Response status code was unacceptable: 403" text.
+                    if error.responseCode == 403 { return }
+                    self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
                     print("❌ API Error:", error.localizedDescription)
                 }
             }
         }
     }
-    
-    
+
+
     func verifyOTP(otp: String, onResult: @escaping (_ isNewUser: Bool) -> Void) {
         isLoading = true
         errorMessage = nil
@@ -99,6 +140,7 @@ class AuthManager: ObservableObject {
             "phone_number": "966" + phoneNumber,
             "otp": otp
         ]
+        
         
         if self.authState == .resetOtp {
             parameters["new_passcode"] = tempPasscode
@@ -136,8 +178,8 @@ class AuthManager: ObservableObject {
                         }
                         
                     case .failure(let error):
-                        self.errorMessage = error.localizedDescription
-                        print("❌ API Error:", error.localizedDescription)
+                        self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+                        print("❌ API Error:", self.errorMessage ?? "")
                     }
                 }
             }
@@ -154,18 +196,48 @@ class AuthManager: ObservableObject {
                             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                                 
                                 let success = json["success"] as? Bool ?? false
-                                if success, let data = json["data"] as? [String: Any] {
-                                    let isNewUser = data["is_new_user"] as? Bool ?? false
-                                    let userId = data["user_id"] as? Int
+                                if success {
+                                    let isNewUser = json["is_new_user"] as? Bool ?? false
+                                    let userId = json["user_id"] as? Int
                                     
                                     print("✅ OTP Verified")
                                     print("🆕 Is New User:", isNewUser)
                                     print("👤 User ID:", userId ?? -1)
+                                    if isNewUser{
+                                        onResult(isNewUser)
+                                    }else{
+                                        if let accessToken = json["access_token"] as? String,
+                                           let userId = json["user_id"] as? Int {
+                                            
+                                            print("✅ Auth Success")
+                                            
+                                            let refreshToken = json["refresh_token"] as? String ?? ""
+                                            let expiresIn = json["expires_in"] as? TimeInterval ?? 3600
+                                            TokenManager.shared.saveTokens(
+                                                access: accessToken,
+                                                refresh: refreshToken,
+                                                expiresIn: expiresIn
+                                            )
+                                            
+                                            let user = User(
+                                                email: self.tempEmail,
+                                                firstName: self.tempFullName,
+                                                lastName: "",
+                                                accessToken: accessToken,
+                                                refreshToken: refreshToken,
+                                                id: userId
+                                            )
+                                            UserModel.shared.saveUser(user)
+                                            self.completeAuthentication()
+                                            onResult(isNewUser)
+                                        } else {
+                                            self.errorMessage = "Unexpected response from server"
+                                            print("❌ Error:", self.errorMessage ?? "")
+                                        }
+                                    }
                                     
-                                    onResult(isNewUser)
-                                    
+                                  
                                 } else {
-                                    // ✅ HERE json exists
                                     self.errorMessage = json["message"] as? String ?? "OTP failed"
                                     print("❌ OTP Failed:", self.errorMessage ?? "")
                                 }
@@ -176,8 +248,8 @@ class AuthManager: ObservableObject {
                         }
                         
                     case .failure(let error):
-                        self.errorMessage = error.localizedDescription
-                        print("❌ API Error:", error.localizedDescription)
+                        self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+                        print("❌ API Error:", self.errorMessage ?? "")
                     }
                 }
             }
@@ -189,18 +261,23 @@ class AuthManager: ObservableObject {
     
     
     func completeSignup(onSuccess: @escaping () -> Void) {
-        guard !tempFullName.isEmpty, !tempEmail.isEmpty, !tempPasscode.isEmpty else { return }
+        guard !tempFullName.isEmpty else { return }
+        guard tempEmail.isEmpty || tempEmail.contains("@") else { return }
         
         isLoading = true
         errorMessage = nil
         
         // Prepare parameters
-        let parameters: [String: Any] = [
+        var parameters: [String: Any] = [
             "phone_number": "966" + phoneNumber,
             "full_name": tempFullName,
-            "email": tempEmail,
-            "passcode": tempPasscode
+            "email": tempEmail
         ]
+
+        if !tempPasscode.isEmpty {
+            parameters["passcode"] = tempPasscode
+        }
+        
         
         
         
@@ -221,17 +298,23 @@ class AuthManager: ObservableObject {
                                let userId = json["user_id"] as? Int {
                                 
                                 print("✅ Signup Success")
-                                print("Access Token:", accessToken)
-                                print("Token Type:", tokenType)
-                                print("User ID:", userId)
                                 
-                                // Save user data
+                                // Save tokens to Keychain (includes refresh + expiry)
+                                let refreshToken = json["refresh_token"] as? String ?? ""
+                                let expiresIn = json["expires_in"] as? TimeInterval ?? 3600
+                                TokenManager.shared.saveTokens(
+                                    access: accessToken,
+                                    refresh: refreshToken,
+                                    expiresIn: expiresIn
+                                )
+                                
+                                // Save user data (for backward compat + callers that read UserModel)
                                 let user = User(
                                     email: self.tempEmail,
                                     firstName: self.tempFullName,
                                     lastName: "",
                                     accessToken: accessToken,
-                                    refreshToken: "",
+                                    refreshToken: refreshToken,
                                     id: userId
                                 )
                                 UserModel.shared.saveUser(user)
@@ -295,12 +378,21 @@ class AuthManager: ObservableObject {
                                 
                                 print("✅ Login Success")
                                 
+                                // Save tokens to Keychain (includes refresh + expiry)
+                                let refreshToken = json["refresh_token"] as? String ?? ""
+                                let expiresIn = json["expires_in"] as? TimeInterval ?? 3600
+                                TokenManager.shared.saveTokens(
+                                    access: accessToken,
+                                    refresh: refreshToken,
+                                    expiresIn: expiresIn
+                                )
+                                
                                 let user = User(
                                     email: "",
                                     firstName: "",
                                     lastName: "",
                                     accessToken: accessToken,
-                                    refreshToken: "",
+                                    refreshToken: refreshToken,
                                     id: userId
                                 )
                                 UserModel.shared.saveUser(user)
@@ -315,7 +407,10 @@ class AuthManager: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                    self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+
+                    if error.responseCode == 403 { return }
+                    print("❌ API Error:", error.localizedDescription)
                 }
             }
         }
@@ -331,22 +426,22 @@ class AuthManager: ObservableObject {
     }
     
     func sendPinFlow() {
-        
         isLoading = true
         errorMessage = nil
-        
-        // Simulate API call to send OTP
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.isLoading = false
-            
-            // In production, this would call your backend API
-            // For demo, we'll simulate success
-            withAnimation {
-                self?.authState = .pinFlow
+        print("Sending pin flow...")
+
+        completeSignup { [weak self] in
+            guard let self else { return }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isLoading = false
+
+                withAnimation {
+                    self.authState = .petName
+                    print("Pin flow sent")
+                }
             }
-            
-            // For demo purposes - print OTP code (in production, this comes via SMS)
-            print("📱 Demo pin Code: 123456")
         }
     }
     
@@ -402,27 +497,18 @@ class AuthManager: ObservableObject {
     
     func completeProfileSetup() {
         guard validateProfileData() else {
-            errorMessage = "Please fill in all fields"
+            errorMessage = "Please fill in all required fields"
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
-        // Simulate API call to create profile
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.isLoading = false
-            
-            // Save profile data
-            UserDefaults.standard.set(self?.tempFullName, forKey: "fullName")
-            UserDefaults.standard.set(self?.tempEmail, forKey: "email")
-            //            UserDefaults.standard.set(self?.tempPetName, forKey: "petName")
-            //            UserDefaults.standard.set(self?.tempPetType, forKey: "petType")
-            UserDefaults.standard.set(true, forKey: "hasProfile")
-            
-            // Complete authentication
-            self?.sendPinFlow()
-        }
+
+        UserDefaults.standard.set(tempFullName, forKey: "fullName")
+        UserDefaults.standard.set(tempEmail,    forKey: "email")
+        UserDefaults.standard.set(true,         forKey: "hasProfile")
+
+        sendPinFlow()
     }
     
     func completeSetup() {
@@ -473,7 +559,14 @@ class AuthManager: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                    switch error.responseCode {
+                    case 400:
+                        self.errorMessage = "Falcon name already taken. Please try another."
+                    case 422:
+                        self.errorMessage = "Falcon name is not accepted. Use only letters and numbers — no spaces or special characters."
+                    default:
+                        self.errorMessage = self.extractErrorMessage(from: error) ?? error.localizedDescription
+                    }
                     print("❌ API Error:", error.localizedDescription)
                 }
             }
@@ -482,11 +575,21 @@ class AuthManager: ObservableObject {
     }
     
     func validateProfileData() -> Bool {
-        return !tempFullName.isEmpty &&
-        !tempEmail.isEmpty &&
-        tempEmail.contains("@")
-        //                &&!tempPetName.isEmpty &&
-        //               !tempPetType.isEmpty
+        // Required field
+        if tempFullName.isEmpty {
+            return false
+        }
+
+        // Optional email: validate only if entered
+        if !tempEmail.isEmpty && !tempEmail.contains("@") {
+            return false
+        }
+
+        // Optional future validations
+        // if tempPetName.isEmpty { return false }
+        // if tempPetType.isEmpty { return false }
+
+        return true
     }
     
     // MARK: - Complete Authentication
@@ -503,6 +606,15 @@ class AuthManager: ObservableObject {
     // MARK: - Logout
     
     func logout() {
+        // Notify server (fire‑and‑forget — always clear local state)
+        ServiceModel.shared.postRequest(endpoint: WebService.authLogout) { _ in }
+
+        // Clear Keychain tokens
+        TokenManager.shared.clearTokens()
+
+        // Clear UserDefaults tokens
+        UserModel.shared.removeUser()
+
         UserDefaults.standard.set(false, forKey: "isAuthenticated")
         
         // Clear sensitive data
@@ -526,5 +638,30 @@ class AuthManager: ObservableObject {
         withAnimation {
             authState = .phoneEntry
         }
+    }
+    
+    // MARK: - Error Handling
+    
+    private func extractErrorMessage(from error: AFError) -> String? {
+        // Provide user-friendly messages based on error codes
+        if let code = error.responseCode {
+            switch code {
+            case 400:
+                return "Invalid OTP. Please check your input."
+            case 401:
+                return "Unauthorized. Please try again."
+            case 403:
+                return "Your account has been blocked. Please contact support Info@saayr.sa"
+            case 422:
+                return "Invalid OTP or phone number. Please try again."
+            case 429:
+                return "Too many attempts. Please try again later."
+            case 500...599:
+                return "Server error. Please try again later."
+            default:
+                return nil
+            }
+        }
+        return nil
     }
 }

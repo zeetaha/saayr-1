@@ -1,9 +1,26 @@
 import SwiftUI
+import SafariServices
+
+
+struct WebPage: Identifiable {
+    let id = UUID()
+    let url: URL
+}
 
 struct PhoneAuthView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var languageManager: LanguageManager
     @FocusState private var isPhoneFocused: Bool
+    
+    @State private var showWeb = false
+    @State private var selectedPage: WebPage? = nil
+    @State private var phoneFieldTouched = false
+
+    private var showPhoneError: Bool {
+        phoneFieldTouched && authManager.phoneNumber.count < 9
+    }
+
+
     
     let gradientColors: [Color] = [
         Color(hex: "#3B82F6"),
@@ -74,27 +91,59 @@ struct PhoneAuthView: View {
                     
                     // ✅ Glassmorphic Card
                     VStack(spacing: 24) {
-                        HStack {
-                            Text("+966")
-                                .fontWeight(.bold)
-                                .foregroundColor(Color(hex: "#3B82F6"))
-                            
-                            TextField("05X XXX XXXX", text: $authManager.phoneNumber)
-                                .keyboardType(.numberPad)
-                                .focused($isPhoneFocused)
-                                .onChange(of: authManager.phoneNumber) { value in
-                                    let filtered = value.filter { $0.isNumber }
-                                    authManager.phoneNumber = String(filtered.prefix(10))
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("+966")
+                                    .fontWeight(.bold)
+                                    .foregroundColor(Color(hex: "#3B82F6"))
+
+                                TextField("", text: $authManager.phoneNumber)
+                                    .keyboardType(.numberPad)
+                                    .focused($isPhoneFocused)
+                                    .foregroundColor(.black)
+                                    .placeholder(when: authManager.phoneNumber.isEmpty) {
+                                        Text("5XX XXX XXX")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .onChange(of: authManager.phoneNumber) { value in
+                                        let digits = value.filter { $0.isNumber }
+                                        // First digit must be 5 — drop any leading non-5 digits
+                                        let valid = digits.drop(while: { $0 != "5" })
+                                        authManager.phoneNumber = String(valid.prefix(9))
+                                        phoneFieldTouched = true
+                                        // Clear error once 9 digits are entered
+                                        if authManager.phoneNumber.count == 9 {
+                                            phoneFieldTouched = false
+                                        }
+                                    }
+                            }
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(
+                                        showPhoneError ? Color.red : Color(hex: "#3B82F6"),
+                                        lineWidth: showPhoneError ? 1.5 : 1
+                                    )
+                            )
+
+                            if showPhoneError {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 12))
+                                    Text(languageManager.currentLanguage == .english
+                                         ? "Please enter a 9-digit mobile number."
+                                         : "يرجى إدخال رقم جوال مكون من 9 أرقام.")
+                                        .font(.system(size: 12, weight: .medium))
                                 }
+                                .foregroundColor(.red)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
                         }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(hex: "#3B82F6"), lineWidth: 1)
-                        )
                         
                         Button {
                             isPhoneFocused = false
+                            phoneFieldTouched = true
+                            guard authManager.phoneNumber.count == 9 else { return }
                             authManager.sendOTP()
                         } label: {
                             if authManager.isLoading {
@@ -114,8 +163,8 @@ struct PhoneAuthView: View {
                         .background(Color(hex: "#3B82F6"))
                         .foregroundColor(.white)
                         .cornerRadius(16)
-                        .disabled(authManager.phoneNumber.count < 10 || authManager.isLoading)
-                        .opacity(authManager.phoneNumber.count < 10 ? 0.6 : 1)
+                        .disabled(authManager.isLoading)
+                        .opacity(authManager.isLoading ? 0.6 : 1)
                     }
                     .padding(24)
                     .background(Color.white.opacity(0.9))
@@ -130,25 +179,37 @@ struct PhoneAuthView: View {
                             .font(.footnote)
                     }
                     
-                    // ✅ TERMS & PRIVACY — UNCHANGED
                     VStack(spacing: 8) {
-                        Text(languageManager.currentLanguage == .english ?
-                             "By continuing, you agree to our" :
-                                "بالمتابعة، أنت توافق على")
-                        .font(.system(size: 13))
-                        .foregroundColor(.gray)
-                        
+                        Text(languageManager.text("legal.agreeText"))
+                            .font(.system(size: 13))
+                            .foregroundColor(.gray)
+
                         HStack(spacing: 4) {
-                            Button("Terms of Service") {}
-                                .underline()
-                            Text("&")
-                            Button("Privacy Policy") {}
-                                .underline()
+                            Button(languageManager.text("legal.terms")) {
+                                if let url = URL(string: "https://api.saayr.sa/api/v1/legal/terms-and-conditions") {
+                                    selectedPage = WebPage(url: url)
+                                }
+                            }
+                            .underline()
+
+                            Text(languageManager.text("legal.and"))
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+
+                            Button(languageManager.text("legal.privacy")) {
+                                if let url = URL(string: "https://api.saayr.sa/api/v1/legal/privacy-policy") {
+                                    selectedPage = WebPage(url: url)
+                                }
+                            }
+                            .underline()
                         }
                         .font(.system(size: 13, weight: .semibold))
                     }
                     .padding(.top, 24)
-                    
+
+
+
+
                     Spacer(minLength: 40)
                 }
             }
@@ -156,8 +217,37 @@ struct PhoneAuthView: View {
         .onAppear {
             isPhoneFocused = true
         }
+        .onChange(of: isPhoneFocused) { focused in
+            if !focused && !authManager.phoneNumber.isEmpty {
+                phoneFieldTouched = true
+            }
+        }
+        .sheet(item: $selectedPage) { page in
+            SafariView(url: page.url)
+        }
+        .alert("Account Blocked", isPresented: $authManager.isBlockedAlert) {
+            Button("OK", role: .cancel) { authManager.isBlockedAlert = false }
+        } message: {
+            Text(authManager.blockedMessage)
+        }
+
+
+        
     }
+
 }
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+
 
 
 // Custom TextField placeholder modifier

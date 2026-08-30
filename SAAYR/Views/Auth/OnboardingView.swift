@@ -192,8 +192,11 @@ struct OnboardingView: View {
                 }
                 .padding(32)
             }
+        
         }
     }
+
+
 }
 
 struct OnboardingSlideView: View {
