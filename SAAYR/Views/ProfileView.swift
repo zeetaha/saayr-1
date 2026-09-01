@@ -120,15 +120,6 @@ struct ProfileView: View {
                     .padding(.horizontal)
                     
                     VStack(spacing: 12) {
-//                        ProfileMenuItem(
-//                            icon: "person.3.fill",
-//                            label: "My Groups",
-//                            gradient: [Color(hex: "#A855F7"), Color(hex: "#8B5CF6")]
-//                        )
-//                        {
-//                            showGroups = true
-//                            }
-
                         ProfileMenuItem(
                             icon: "questionmark.circle.fill",
                             label: "Support",
@@ -136,6 +127,14 @@ struct ProfileView: View {
                             badgeCount: supportUnreadCount
                         ) {
                             showSupport = true
+                        }
+
+                        ProfileMenuItem(
+                            icon: "person.3.fill",
+                            label: "Groups",
+                            gradient: [Color(hex: "#0E6B45"), Color(hex: "#0A4E33")]
+                        ) {
+                            showGroups = true
                         }
 
                         ProfileMenuItem(
@@ -191,7 +190,10 @@ struct ProfileView: View {
             email = userManager.userData.email ?? ""
             fetchSupportUnreadCount()
         }
-        .sheet(isPresented: $showGroups) {
+        // Groups is a stack of its own, not one screen — it gets the full
+        // window the way Support does, rather than a sheet that would sit
+        // under its own navigation.
+        .fullScreenCover(isPresented: $showGroups) {
             GroupsView()
         }
         .fullScreenCover(isPresented: $showSupport) {
