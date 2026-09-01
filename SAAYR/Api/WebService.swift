@@ -79,6 +79,41 @@ class WebService {
     /// payload. Idempotent — claiming twice is not an error.
     static func bossClaimRewards(_ bossID: Int) -> String { baseUrl + "boss/\(bossID)/rewards/claim" }
 
+    // MARK: - Groups
+    /// The player's own groups, and the public ones they could join. Discover
+    /// takes `search` and `limit`; without a search it answers most-active
+    /// first.
+    static var groups         = baseUrl + "groups"
+    static var groupsDiscover = baseUrl + "groups/discover"
+    /// Everything below is per-group. The group screen pairs its REST loads
+    /// with the `live` SSE stream: REST hydrates, the stream says what to
+    /// re-fetch. Do not poll.
+    static func group(_ id: Int) -> String            { baseUrl + "groups/\(id)" }
+    static func groupLeave(_ id: Int) -> String       { baseUrl + "groups/\(id)/leave" }
+    static func groupMembers(_ id: Int) -> String     { baseUrl + "groups/\(id)/members" }
+    static func groupMember(_ id: Int, userID: Int) -> String { baseUrl + "groups/\(id)/members/\(userID)" }
+    static func groupRequests(_ id: Int) -> String    { baseUrl + "groups/\(id)/requests" }
+    static func groupRequestApprove(_ id: Int, requestID: Int) -> String {
+        baseUrl + "groups/\(id)/requests/\(requestID)/approve"
+    }
+    static func groupRequestDecline(_ id: Int, requestID: Int) -> String {
+        baseUrl + "groups/\(id)/requests/\(requestID)/decline"
+    }
+    static func groupInviteLinks(_ id: Int) -> String        { baseUrl + "groups/\(id)/invite-links" }
+    static func groupInviteLinkCurrent(_ id: Int) -> String  { baseUrl + "groups/\(id)/invite-links/current" }
+    static func groupInviteSearch(_ id: Int) -> String       { baseUrl + "groups/\(id)/invite-search" }
+    static func groupInviteUsers(_ id: Int) -> String        { baseUrl + "groups/\(id)/invite-users" }
+    /// Joining from a shared link. No deep-link handler routes to this yet —
+    /// the method exists so one can.
+    static func groupInviteRedeem(_ code: String) -> String   { baseUrl + "groups/invite-links/\(code)/redeem" }
+    static func groupFeed(_ id: Int) -> String        { baseUrl + "groups/\(id)/feed" }
+    static func groupFeedReact(_ id: Int, eventID: Int) -> String {
+        baseUrl + "groups/\(id)/feed/\(eventID)/react"
+    }
+    static func groupLeaderboard(_ id: Int) -> String { baseUrl + "groups/\(id)/leaderboard" }
+    static func groupReport(_ id: Int) -> String      { baseUrl + "groups/\(id)/report" }
+    static func groupLive(_ id: Int) -> String        { baseUrl + "groups/\(id)/live" }
+
     // MARK: - User
     static var profile       = baseUrl + "user/profile"
     static var dashboard     = baseUrl + "user/dashboard"

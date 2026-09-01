@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0D695DDA2FF9B52200C68FAB /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 0D695DD92FF9B52200C68FAB /* FirebaseMessaging */; };
-		0D695DDC2FF9B6FD00C68FAB /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0D695DDB2FF9B6FD00C68FAB /* GoogleService-Info.plist */; };
 		0D7272D12FE871E100DFBA5A /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 0D7272D02FE871E100DFBA5A /* MapboxMaps */; };
 		0D744B182F12815500116FD4 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 0D744B172F12815500116FD4 /* Alamofire */; };
 		0D744B1D2F12816700116FD4 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 0D744B1C2F12816700116FD4 /* Kingfisher */; };
@@ -17,7 +16,6 @@
 
 /* Begin PBXFileReference section */
 		0D0CECEA2EF4A47C00FB6A6F /* Saayr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saayr.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		0D695DDB2FF9B6FD00C68FAB /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -62,7 +60,6 @@
 			children = (
 				0D0CECEC2EF4A47C00FB6A6F /* SAAYR */,
 				0D0CECEB2EF4A47C00FB6A6F /* Products */,
-				0D695DDB2FF9B6FD00C68FAB /* GoogleService-Info.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -150,7 +147,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0D695DDC2FF9B6FD00C68FAB /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -299,7 +295,7 @@
 				CODE_SIGN_ENTITLEMENTS = SAAYR/SAAYR.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = X4KTHW6XMR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -323,7 +319,7 @@
 					"@executable_path/Frameworks",
 				);
 				MAPBOX_ACCESS_TOKEN = pk.eyJ1Ijoic2FheXIiLCJhIjoiY21xbXZkcG12MHNsNTJyczcwNTBub21uayJ9.EZXOIN_u7MaRtE4gybGLlQ;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saayr.app;
 				PRODUCT_NAME = Saayr;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -346,7 +342,7 @@
 				CODE_SIGN_ENTITLEMENTS = SAAYR/SAAYR.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = X4KTHW6XMR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -370,7 +366,7 @@
 					"@executable_path/Frameworks",
 				);
 				MAPBOX_ACCESS_TOKEN = pk.eyJ1Ijoic2FheXIiLCJhIjoiY21xbXZkcG12MHNsNTJyczcwNTBub21uayJ9.EZXOIN_u7MaRtE4gybGLlQ;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saayr.app;
 				PRODUCT_NAME = Saayr;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -451,7 +447,7 @@
 				CODE_SIGN_ENTITLEMENTS = SAAYR/SAAYR.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = X4KTHW6XMR;
 				ENABLE_PREVIEWS = YES;
 				GCC_OPTIMIZATION_LEVEL = s;
@@ -476,7 +472,7 @@
 					"@executable_path/Frameworks",
 				);
 				MAPBOX_ACCESS_TOKEN = pk.eyJ1Ijoic2FheXIiLCJhIjoiY21xbXZkcG12MHNsNTJyczcwNTBub21uayJ9.EZXOIN_u7MaRtE4gybGLlQ;
-				MARKETING_VERSION = 1.0.7;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saayr.app.staging;
 				PRODUCT_NAME = Saayr;
 				PROVISIONING_PROFILE_SPECIFIER = "";
