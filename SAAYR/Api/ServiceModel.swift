@@ -420,13 +420,21 @@ class ServiceModel {
 
     // MARK: - Zones (Fog of War)
 
-    func fetchZones(completion: @escaping (Result<[Zone], Error>) -> Void) {
+    func fetchZones(completion: @escaping (Result<ZonesResponse, Error>) -> Void) {
         getRequest(endpoint: WebService.zones) { result in
             switch result {
             case .success(let data):
+                // Envelope first, bare array second — the same order
+                // `fetchNearby` reads its own two shapes in. The array is what
+                // the endpoint answers with today; the envelope is what carries
+                // the coverage config.
+                if let envelope = try? JSONDecoder().decode(ZonesResponse.self, from: data) {
+                    completion(.success(envelope))
+                    return
+                }
                 do {
                     let zones = try JSONDecoder().decode([Zone].self, from: data)
-                    completion(.success(zones))
+                    completion(.success(ZonesResponse(zones: zones, config: nil)))
                 } catch {
                     completion(.failure(error))
                 }

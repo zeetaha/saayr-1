@@ -43,6 +43,8 @@ struct MapboxMapContainer: UIViewRepresentable {
     /// as boss markers so an on-site event has somewhere to point at.
     var bossKeys: Set<String> = []
     var zones: [Zone]
+    /// The playable circle, when the server has sent one.
+    var coverage: ZoneCoverageConfig?
     /// Areas of the boss the home banner is advertising, drawn in red above
     /// the fog. Empty whenever no banner is showing, which is what takes the
     /// overlay back off the map.
@@ -122,6 +124,7 @@ struct MapboxMapContainer: UIViewRepresentable {
         context.coordinator.syncZones(
             mapView: mapView,
             zones: zones,
+            coverage: coverage,
             isArabic: isArabic
         )
 
@@ -237,6 +240,31 @@ struct MapboxMapContainer: UIViewRepresentable {
             static let lockedLabelHalo  = StyleColor(red: 8, green: 20, blue: 16, alpha: 0.7)
             static let labelSize: Double      = 15
             static let labelHaloWidth: Double = 1.6
+        }
+
+        /// The coverage look: one circle of playable ground, everything beyond
+        /// it blacked out. Zones stop being holes in the fog and become plain
+        /// shading inside the circle — grey while unexplored, nothing at all
+        /// once explored, so the map fills in as the player covers it.
+        private enum CoverageStyle {
+            /// Peak darkness outside the circle. Short of opaque for the same
+            /// reason as the older fog: the roads ghosting through read as
+            /// deliberate rather than as a failed render.
+            static let maxOpacity: Double = 0.96
+            static let fogRed = 13.0, fogGreen = 23.0, fogBlue = 21.0
+
+            static let lockedFill   = StyleColor(red: 143, green: 151, blue: 143, alpha: 0.55)
+            static let lockedStroke = StyleColor(red: 46, green: 125, blue: 79, alpha: 1.0)
+            static let lockedLineWidth: Double = 2.0
+
+            /// Appended to an explored zone's name.
+            static let exploredMark = " ✓"
+
+            /// Optional to match `StyleColor`'s own failable initialiser, the
+            /// way every colour above is.
+            static func fog(_ fraction: Double) -> StyleColor? {
+                StyleColor(red: fogRed, green: fogGreen, blue: fogBlue, alpha: maxOpacity * fraction)
+            }
         }
 
         /// The boss areas. Red because nothing else on this map is — the
@@ -402,10 +430,16 @@ struct MapboxMapContainer: UIViewRepresentable {
 
         // MARK: - Zone Annotations
 
-        func syncZones(mapView: MapboxMaps.MapView, zones: [Zone], isArabic: Bool) {
+        func syncZones(
+            mapView: MapboxMaps.MapView,
+            zones: [Zone],
+            coverage: ZoneCoverageConfig?,
+            isArabic: Bool
+        ) {
+            let circle = coverage.map { "\($0.center.lat),\($0.center.lng),\($0.radius),\($0.fade)" } ?? "none"
             let digest = (zones
                 .map { "\($0.id):\($0.is_unlocked)" }
-                .joined(separator: "|") + "|ar:\(isArabic)")
+                .joined(separator: "|") + "|ar:\(isArabic)|circle:\(circle)")
                 .hashValue
             guard digest != currentZonesDigest else { return }
             currentZonesDigest = digest
@@ -445,9 +479,24 @@ struct MapboxMapContainer: UIViewRepresentable {
             let unlockedRings = Self.rings(of: zones.filter(\.is_unlocked).map(\.boundary_polygon))
             let lockedRings   = Self.rings(of: zones.filter { !$0.is_unlocked }.map(\.boundary_polygon))
 
+            // Two fog models, and only ever one of them. The circle replaces
+            // the blackout rather than adding to it — drawing both would stack
+            // two darkenings over the same ground.
+            if let coverage {
+                // Shading first, blackout second — the reverse of the older
+                // model. A zone can reach past the circle, and out there it is
+                // not playable ground, so the fog has to cover it rather than
+                // the other way round.
+                installLockedZones(mapView: mapView, rings: lockedRings, style: .coverage)
+                installCoverageFog(mapView: mapView, coverage: coverage)
+                // An explored zone is drawn as nothing at all: no fill, no
+                // border. Covered ground is simply clear.
+                return
+            }
+
             // Created first so every shaded region below draws over the fog.
             installFog(mapView: mapView, zoneRings: unlockedRings + lockedRings)
-            installLockedZones(mapView: mapView, rings: lockedRings)
+            installLockedZones(mapView: mapView, rings: lockedRings, style: .legacy)
 
             guard !unlockedRings.isEmpty else { return }
 
@@ -557,6 +606,70 @@ struct MapboxMapContainer: UIViewRepresentable {
         /// Locked zones are punched out too — they're shaded separately by
         /// `installLockedZones` so they stay legible as regions you haven't
         /// reached yet. Only genuinely out-of-bounds ground goes black.
+        /// The coverage circle: clear inside, black outside, and a short graded
+        /// band across the edge so the boundary reads as a horizon rather than
+        /// a cut.
+        ///
+        /// Four shapes. Three are rings stepping up through the fade, and the
+        /// last is the whole world with the outermost ring punched out of it.
+        /// They abut rather than overlap, so each one's opacity is the opacity
+        /// of that band — nothing compounds.
+        private func installCoverageFog(
+            mapView: MapboxMaps.MapView,
+            coverage: ZoneCoverageConfig
+        ) {
+            let centre = coverage.coordinate
+            let radius = coverage.radiusMeters
+            let fade = max(coverage.fadeMeters, 0)
+
+            // A circle with no radius would black out the map entirely, which
+            // reads as a broken screen. Leave it uncovered instead.
+            guard radius > 0 else { return }
+
+            let bands: [(from: Double, to: Double?, fraction: Double)] = [
+                (radius,               radius + fade * 0.33, 0.25),
+                (radius + fade * 0.33, radius + fade * 0.66, 0.50),
+                (radius + fade * 0.66, radius + fade,        0.75),
+                (radius + fade,        nil,                  1.00)
+            ]
+
+            var shapes: [PolygonAnnotation] = []
+            for band in bands {
+                let outer = band.to.map { Ring(coordinates: Self.circle(around: centre, radius: $0)) }
+                    ?? Self.worldRing
+                let inner = Ring(coordinates: Self.circle(around: centre, radius: band.from))
+
+                var shape = PolygonAnnotation(polygon: Polygon(outerRing: outer, innerRings: [inner]))
+                shape.fillColor = CoverageStyle.fog(band.fraction)
+                shapes.append(shape)
+            }
+
+            let manager = mapView.annotations.makePolygonAnnotationManager(id: "zones-fog")
+            manager.slot = Self.overlaySlot
+            manager.annotations = shapes
+            zoneFogManager = manager
+        }
+
+        /// A closed ring of `points` around `centre`. Longitude degrees shrink
+        /// towards the poles, so the circle stays round on the ground instead
+        /// of being drawn as an ellipse.
+        private static func circle(
+            around centre: CLLocationCoordinate2D,
+            radius metres: Double,
+            points: Int = 90
+        ) -> [CLLocationCoordinate2D] {
+            let latitudeDegrees = metres / 111_320
+            let longitudeDegrees = metres / (111_320 * max(cos(centre.latitude * .pi / 180), 0.01))
+
+            return (0...points).map { step in
+                let angle = (Double(step) / Double(points)) * 2 * .pi
+                return CLLocationCoordinate2D(
+                    latitude: centre.latitude + latitudeDegrees * sin(angle),
+                    longitude: centre.longitude + longitudeDegrees * cos(angle)
+                )
+            }
+        }
+
         private func installFog(
             mapView: MapboxMaps.MapView,
             zoneRings: [[CLLocationCoordinate2D]]
@@ -581,11 +694,22 @@ struct MapboxMapContainer: UIViewRepresentable {
 
         /// Shades every locked zone as its own dark block with a soft boundary,
         /// so the areas still to be unlocked are visible as regions.
+        /// Which palette an unexplored zone is shaded with. The older fog cuts
+        /// zones out of a blackout, so a locked one has to read as darker
+        /// ground; inside the coverage circle there is no blackout to be
+        /// darker than, so it reads as grey instead.
+        enum LockedZoneStyle { case legacy, coverage }
+
         private func installLockedZones(
             mapView: MapboxMaps.MapView,
-            rings: [[CLLocationCoordinate2D]]
+            rings: [[CLLocationCoordinate2D]],
+            style: LockedZoneStyle
         ) {
             guard !rings.isEmpty else { return }
+
+            let fillColor = style == .coverage ? CoverageStyle.lockedFill : ZoneStyle.lockedFill
+            let strokeColor = style == .coverage ? CoverageStyle.lockedStroke : ZoneStyle.lockedStroke
+            let strokeWidth = style == .coverage ? CoverageStyle.lockedLineWidth : ZoneStyle.lockedLineWidth
 
             var fills: [PolygonAnnotation] = []
             var outlines: [PolylineAnnotation] = []
@@ -593,7 +717,7 @@ struct MapboxMapContainer: UIViewRepresentable {
                 var fill = PolygonAnnotation(
                     polygon: Polygon(outerRing: Ring(coordinates: coords), innerRings: [])
                 )
-                fill.fillColor = ZoneStyle.lockedFill
+                fill.fillColor = fillColor
                 fills.append(fill)
 
                 // Repeat the first point so the stroke closes the ring.
@@ -601,8 +725,8 @@ struct MapboxMapContainer: UIViewRepresentable {
                 if let first = coords.first { ring.append(first) }
 
                 var outline = PolylineAnnotation(lineCoordinates: ring)
-                outline.lineColor = ZoneStyle.lockedStroke
-                outline.lineWidth = ZoneStyle.lockedLineWidth
+                outline.lineColor = strokeColor
+                outline.lineWidth = strokeWidth
                 outline.lineJoin = .round
                 outlines.append(outline)
             }
@@ -626,6 +750,10 @@ struct MapboxMapContainer: UIViewRepresentable {
             zones: [Zone],
             isArabic: Bool
         ) {
+            // An explored zone loses its shading entirely in the coverage look,
+            // so the tick is the only thing left saying it was ever unexplored.
+            let marksExplored = parent.coverage != nil
+
             var labels: [PointAnnotation] = []
             for zone in zones {
                 let title = isArabic
@@ -634,9 +762,16 @@ struct MapboxMapContainer: UIViewRepresentable {
                 guard !title.isEmpty, let center = Self.labelCenter(of: zone) else { continue }
 
                 var label = PointAnnotation(id: "zone-label-\(zone.id)", point: Point(center))
-                label.textField = title
-                label.textColor = zone.is_unlocked ? ZoneStyle.labelColor : ZoneStyle.lockedLabelColor
-                label.textHaloColor = zone.is_unlocked ? ZoneStyle.labelHalo : ZoneStyle.lockedLabelHalo
+                label.textField = marksExplored && zone.is_unlocked
+                    ? title + CoverageStyle.exploredMark
+                    : title
+                // The pale-on-dark pair is for the older fog, where an
+                // unexplored zone is a dark hole. Inside the coverage circle
+                // it is grey over a light basemap instead, so every name reads
+                // dark on a bright halo whichever side of explored it is on.
+                let onDarkGround = !zone.is_unlocked && parent.coverage == nil
+                label.textColor = onDarkGround ? ZoneStyle.lockedLabelColor : ZoneStyle.labelColor
+                label.textHaloColor = onDarkGround ? ZoneStyle.lockedLabelHalo : ZoneStyle.labelHalo
                 label.textHaloWidth = ZoneStyle.labelHaloWidth
                 label.textSize = ZoneStyle.labelSize
                 label.textAnchor = .center

@@ -197,6 +197,58 @@ struct Zone: Identifiable, Decodable {
     let is_unlocked: Bool
 }
 
+/// The playable circle, sent alongside the zones.
+///
+/// The map is blacked out beyond it, with a graded band at the edge so the
+/// boundary reads as a horizon rather than a cut. Distances arrive as strings
+/// with a unit — `"34km"`, `"2km"` — because they're authored as config rather
+/// than computed.
+struct ZoneCoverageConfig: Decodable, Equatable {
+
+    struct Center: Decodable, Equatable {
+        let lat: Double
+        let lng: Double
+    }
+
+    let center: Center
+    let radius: String
+    let fade: String
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: center.lat, longitude: center.lng)
+    }
+
+    /// Falls back to the values the design was drawn at, so a malformed string
+    /// gives a circle in roughly the right place instead of one with no radius
+    /// — which would black out the entire map.
+    var radiusMeters: Double { Self.meters(radius) ?? 34_000 }
+    var fadeMeters: Double { Self.meters(fade) ?? 2_000 }
+
+    /// `"34km"` → 34000, `"500m"` → 500, a bare `"34"` → 34000. Kilometres are
+    /// assumed for a unitless value because every value so far is in them.
+    static func meters(_ text: String) -> Double? {
+        let cleaned = text.trimmingCharacters(in: .whitespaces).lowercased()
+        // Checked before "m", which "km" also ends with.
+        if cleaned.hasSuffix("km") {
+            return Double(cleaned.dropLast(2).trimmingCharacters(in: .whitespaces)).map { $0 * 1000 }
+        }
+        if cleaned.hasSuffix("m") {
+            return Double(cleaned.dropLast(1).trimmingCharacters(in: .whitespaces))
+        }
+        return Double(cleaned).map { $0 * 1000 }
+    }
+}
+
+/// What `GET /zones/` answers with.
+///
+/// The endpoint used to return a bare array and may still, so the array is
+/// read as an envelope with no config — the same shape of fallback
+/// `fetchNearby` uses for its own older response.
+struct ZonesResponse: Decodable {
+    let zones: [Zone]
+    let config: ZoneCoverageConfig?
+}
+
 struct ZoneUnlockInfo: Decodable {
     let zone_id: Int
     let headline_en: String

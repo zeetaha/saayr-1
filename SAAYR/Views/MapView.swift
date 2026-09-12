@@ -29,6 +29,10 @@ struct MapView: View {
 
     // Fog of War
     @State private var fogZones: [Zone] = []
+    /// The playable circle. Nil until the server sends one — and while it is
+    /// nil the map keeps its older fog, where the zones themselves are the
+    /// holes in the blackout.
+    @State private var zoneCoverage: ZoneCoverageConfig?
     @State private var pendingUnlock: ZoneUnlockInfo? = nil
     @State private var showUnlockPopup = false
 
@@ -145,6 +149,7 @@ struct MapView: View {
                 lockedLandmarkKeys: discoveries.lockedKeys(in: visibleLocations),
                 bossKeys: bossKeys,
                 zones: fogZones,
+                coverage: zoneCoverage,
                 bossZones: bossZoneStore.zones,
                 isArabic: languageManager.currentLanguage == .arabic,
                 isCheckingIn: isDwelling,
@@ -721,11 +726,13 @@ struct MapView: View {
         ServiceModel.shared.fetchZones { result in
             DispatchQueue.main.async {
                 switch result {
-                case .success(let zones):
-                    fogZones = zones
+                case .success(let response):
+                    fogZones = response.zones
+                    zoneCoverage = response.config
                 case .failure(let error):
                     print("⚠️ Zones unavailable:", error.localizedDescription)
                     fogZones = []
+                    zoneCoverage = nil
                 }
             }
         }

@@ -319,7 +319,7 @@
 					"@executable_path/Frameworks",
 				);
 				MAPBOX_ACCESS_TOKEN = pk.eyJ1Ijoic2FheXIiLCJhIjoiY21xbXZkcG12MHNsNTJyczcwNTBub21uayJ9.EZXOIN_u7MaRtE4gybGLlQ;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saayr.app;
 				PRODUCT_NAME = Saayr;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -366,7 +366,7 @@
 					"@executable_path/Frameworks",
 				);
 				MAPBOX_ACCESS_TOKEN = pk.eyJ1Ijoic2FheXIiLCJhIjoiY21xbXZkcG12MHNsNTJyczcwNTBub21uayJ9.EZXOIN_u7MaRtE4gybGLlQ;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saayr.app;
 				PRODUCT_NAME = Saayr;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -472,7 +472,7 @@
 					"@executable_path/Frameworks",
 				);
 				MAPBOX_ACCESS_TOKEN = pk.eyJ1Ijoic2FheXIiLCJhIjoiY21xbXZkcG12MHNsNTJyczcwNTBub21uayJ9.EZXOIN_u7MaRtE4gybGLlQ;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.saayr.app.staging;
 				PRODUCT_NAME = Saayr;
 				PROVISIONING_PROFILE_SPECIFIER = "";
