@@ -145,6 +145,11 @@ struct MapboxMapContainer: UIViewRepresentable {
             polygon: merchantPolygon
         )
 
+        #if DEBUG
+        // TEMPORARY — last, so it draws over the pins. See `syncCoverageCentre`.
+        context.coordinator.syncCoverageCentre(mapView: mapView, coverage: coverage)
+        #endif
+
         context.coordinator.syncMysteryArea(
             mapView: mapView,
             polygon: mysteryArea
@@ -202,6 +207,10 @@ struct MapboxMapContainer: UIViewRepresentable {
         private var zoneLockedFillManager: PolygonAnnotationManager?
         private var zoneLockedOutlineManager: PolylineAnnotationManager?
         private var zoneLabelManager: PointAnnotationManager?
+        #if DEBUG
+        private var coverageCentreManager: CircleAnnotationManager?
+        private var coverageCentreDigest: String = ""
+        #endif
         private var currentZonesDigest: Int = -1
 
         // Boss zone annotation state
@@ -472,6 +481,7 @@ struct MapboxMapContainer: UIViewRepresentable {
                 zoneLabelManager = nil
             }
 
+
             // Deferred so the names are the last manager created and therefore
             // draw above every shaded region, whichever way this function exits.
             defer { installZoneLabels(mapView: mapView, zones: zones, isArabic: isArabic) }
@@ -649,6 +659,40 @@ struct MapboxMapContainer: UIViewRepresentable {
             manager.annotations = shapes
             zoneFogManager = manager
         }
+
+        #if DEBUG
+        /// TEMPORARY: marks where the server says the coverage circle is
+        /// centred, so the config can be checked against the ground without
+        /// measuring the fog's edge. Drawn in screen points rather than metres
+        /// so it stays a dot at every zoom, and installed after the markers so
+        /// a pin standing on the centre can't hide it. Delete this, its call in
+        /// `updateUIView` and its teardown once the centre is confirmed.
+        func syncCoverageCentre(
+            mapView: MapboxMaps.MapView,
+            coverage: ZoneCoverageConfig?
+        ) {
+            let digest = coverage.map { "\($0.center.lat),\($0.center.lng)" } ?? "none"
+            guard digest != coverageCentreDigest else { return }
+            coverageCentreDigest = digest
+
+            if coverageCentreManager != nil {
+                mapView.annotations.removeAnnotationManager(withId: "coverage-centre")
+                coverageCentreManager = nil
+            }
+            guard let coverage else { return }
+
+            var dot = CircleAnnotation(centerCoordinate: coverage.coordinate)
+            dot.circleRadius = 7
+            dot.circleColor = StyleColor(red: 232, green: 163, blue: 61, alpha: 1.0)
+            dot.circleStrokeWidth = 3
+            dot.circleStrokeColor = StyleColor(red: 255, green: 255, blue: 255, alpha: 1.0)
+
+            let manager = mapView.annotations.makeCircleAnnotationManager(id: "coverage-centre")
+            manager.slot = Self.overlaySlot
+            manager.annotations = [dot]
+            coverageCentreManager = manager
+        }
+        #endif
 
         /// A closed ring of `points` around `centre`. Longitude degrees shrink
         /// towards the poles, so the circle stays round on the ground instead

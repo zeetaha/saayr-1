@@ -1058,7 +1058,10 @@ struct MerchantMarkerView: View {
     @State private var pulse = false
     
     var markerColor: Color {
-        if merchant.type ?? "".lowercased() == "hidden_gems" {
+        // `merchant.type ?? "".lowercased()` read as `type ?? ("".lowercased())`
+        // — the lowercasing landed on the default, not on the value, so the
+        // comparison was case-sensitive against whatever the server sent.
+        if merchant.isHiddenGem {
             return .yellow
         }
         return isPartner ? .purple : .green
@@ -1333,6 +1336,8 @@ struct MerchantLocation: Identifiable {
     // Polygon boundary (for rendering)
     let boundaryPolygon: [PolygonPoint]?
     let type: String?
+
+    var isHiddenGem: Bool { SaayrLocationType.isHiddenGem(type) }
 }
 
 extension NearbyLocationResponse {

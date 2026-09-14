@@ -96,11 +96,20 @@ struct NearbyLocationResponse: Identifiable, Sendable, Codable {
 
     /// Landmarks are the pins that stay a mystery until the player stands in
     /// them. The server flag wins; `type` is the fallback until it ships.
+    ///
+    /// Hidden gems used to be on this list and are not any more. They arrive
+    /// with `can_checkin: true` and an XP reward, which a landmark never does —
+    /// they're places to check in at, not mysteries to uncover — and while they
+    /// were counted as landmarks they drew as a permanent "?" pin, because the
+    /// mystery treatment is chosen before the marker's own colour is. A server
+    /// that does send `is_landmark: true` for one still wins.
     var isLandmark: Bool {
         if let is_landmark { return is_landmark }
         guard let type = type?.lowercased() else { return false }
-        return ["landmark", "landmarks", "hidden_gem", "hidden_gems", "mystery"].contains(type)
+        return ["landmark", "landmarks", "mystery"].contains(type)
     }
+
+    var isHiddenGem: Bool { SaayrLocationType.isHiddenGem(type) }
 
     var coordinate: CLLocationCoordinate2D {
         .init(latitude: latitude, longitude: longitude)
@@ -179,6 +188,17 @@ struct PolygonPoint: Codable, Sendable, Hashable {
     }
 }
 // MARK: - Fog of War models
+
+/// The `type` strings the server uses, read in one place so the map and the
+/// marker can't disagree about what a location is.
+enum SaayrLocationType {
+    private static let hiddenGem: Set<String> = ["hidden_gem", "hidden_gems"]
+
+    static func isHiddenGem(_ raw: String?) -> Bool {
+        guard let raw = raw?.lowercased() else { return false }
+        return hiddenGem.contains(raw)
+    }
+}
 
 struct ZoneCoordinate: Decodable {
     let lat: Double
