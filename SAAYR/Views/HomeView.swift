@@ -103,6 +103,9 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity) // Center content on wider screens
                 }
             }
+            // Inside the safe area, so the band crosses the corner of the
+            // content and never the clock or the battery.
+            .overlay(alignment: .topTrailing) { BetaRibbon() }
             .navigationBarHidden(true)
             
             .fullScreenCover(isPresented: $showPVPPayment) {
@@ -912,4 +915,45 @@ struct OudSmokeOverlay: View {
     HomeView()
         .environmentObject(LanguageManager())
         .environmentObject(UserManager())
+}
+
+
+// MARK: - Beta ribbon
+
+/// The diagonal "BETA" flash in Home's top-right corner.
+///
+/// Drawn as one long band rotated across a square and then clipped to it: the
+/// overshoot at both ends is what gives the flat edges where the ribbon meets
+/// the sides, rather than a band that stops short in mid-air.
+private struct BetaRibbon: View {
+
+    /// The square the band is cut to.
+    private let side: CGFloat = 104
+    private let bandHeight: CGFloat = 26
+    /// How far the band's centre sits from the square's centre, measured along
+    /// the diagonal towards the corner. Larger pushes it further into the
+    /// corner, where there is less room for the word.
+    private let towardsCorner: CGFloat = 38
+
+    var body: some View {
+        Color.clear
+            .frame(width: side, height: side)
+            .overlay {
+                Text("BETA")
+                    .font(.system(size: 11.5, weight: .black))
+                    .tracking(2)
+                    .foregroundColor(.white)
+                    .frame(width: side * 2, height: bandHeight)
+                    .background(Color(hex: "#1B8A5A"))
+                    .rotationEffect(.degrees(45))
+                    .offset(
+                        x: towardsCorner / 2.squareRoot(),
+                        y: -towardsCorner / 2.squareRoot()
+                    )
+            }
+            .clipped()
+            // A label, not a control — taps belong to whatever is underneath.
+            .allowsHitTesting(false)
+            .accessibilityLabel("Beta")
+    }
 }
