@@ -10,6 +10,10 @@ struct SettingsView: View {
         case language, logout
         var id: Int { hashValue }
     }
+    /// Read by the map. Stored rather than passed, so the two screens don't
+    /// have to know about each other.
+    @AppStorage(MapPreferences.showsDiscoveredLandmarksKey)
+    private var showsDiscoveredLandmarks = true
     @State private var showWeb = false
     @State private var selectedURL: URL?
 
@@ -44,6 +48,26 @@ struct SettingsView: View {
                             .padding(.horizontal)
                         }
                         
+                        // Map Section
+                        VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 8) {
+                            Text(languageManager.text("settings.map"))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+
+                            VStack(spacing: 0) {
+                                ToggleSettingsRow(
+                                    icon: "mappin.and.ellipse",
+                                    label: languageManager.text("settings.showDiscoveredLandmarks"),
+                                    gradient: [Color(hex: "#10B981"), Color(hex: "#059669")],
+                                    isOn: $showsDiscoveredLandmarks
+                                )
+                            }
+                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .cornerRadius(12)
+                            .padding(.horizontal)
+                        }
+
                         // Privacy & Security Section
                         VStack(alignment: languageManager.currentLanguage == .english ? .leading : .trailing, spacing: 8) {
                             Text(languageManager.text("settings.privacy"))
@@ -304,4 +328,43 @@ struct SettingsDetailView: View {
     SettingsView()
         .environmentObject(LanguageManager())
         .environmentObject(AuthManager())
+}
+
+
+/// A settings row whose control is a switch rather than a tap target. Same
+/// icon tile and metrics as `SettingsRow`, so the two sit together without a
+/// seam.
+struct ToggleSettingsRow: View {
+    let icon: String
+    let label: String
+    let gradient: [Color]
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: gradient,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
+
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+            }
+
+            Toggle(isOn: $isOn) {
+                Text(label)
+                    .font(.system(size: 17))
+                    .foregroundColor(.primary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
 }

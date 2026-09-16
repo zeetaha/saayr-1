@@ -84,19 +84,28 @@ struct MapView: View {
 
     private let fraudStore = FraudEvidenceStore()
 
+    /// Set in Settings. Hides landmarks the player has already found, which
+    /// otherwise stay pinned for good and pile up as the count grows.
+    @AppStorage(MapPreferences.showsDiscoveredLandmarksKey)
+    private var showsDiscoveredLandmarks = true
+
     /// Merchants the player is allowed to see: only those inside an unlocked
     /// zone. Everything else sits on ground the map has blacked out, so a pin
     /// there would point at somewhere they can't go.
     private var visibleLocations: [NearbyLocationResponse] {
-        let real = ZoneVisibility.inUnlockedZones(locations, zones: fogZones)
+        var shown = ZoneVisibility.inUnlockedZones(locations, zones: fogZones)
 
         #if DEBUG
         // Appended after the zone filter on purpose: the test landmark should
         // show up whether or not the surrounding zone is unlocked.
-        if let fixture = debugLandmark { return real + [fixture] }
+        if let fixture = debugLandmark { shown.append(fixture) }
         #endif
 
-        return real
+        guard !showsDiscoveredLandmarks else { return shown }
+        // Found landmarks only. An undiscovered one is still a mystery pin —
+        // the thing the player is out looking for — and everything that isn't
+        // a landmark is somewhere they can still check in.
+        return shown.filter { !($0.isLandmark && discoveries.isDiscovered($0)) }
     }
 
     #if DEBUG
