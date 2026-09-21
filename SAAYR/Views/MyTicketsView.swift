@@ -189,15 +189,11 @@ struct MyTicketsView: View {
                                 let idStr = "\(idVal ?? "0")"
                                 let subject = t["subject"] as? String ?? ""
                                 let description = t["description"] as? String ?? ""
-                                let statusStr = (t["status"] as? String ?? "open").lowercased()
                                 let createdAt = t["created_at"] as? String ?? ""
                                 var timeStr = createdAt
                                 timeStr = formatMessageTime(timeStr)
 
-                                let status: TicketStatus
-                                if statusStr.contains("resolve") { status = .resolved }
-                                else if statusStr.contains("progress") || statusStr.contains("in_progress") { status = .inProgress }
-                                else { status = .open }
+                                let status = TicketStatus(server: t["status"] as? String)
 
                                 let ticket = Ticket(id: idStr, title: subject, desc: description, message: description, timeAgo: timeStr, status: status)
                                 loaded.append(ticket)

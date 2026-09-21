@@ -164,6 +164,19 @@ struct Ticket: Identifiable, Hashable {
 
 enum TicketStatus {
     case inProgress, resolved, open
+
+    /// Read from the server's `status` string. Held in one place so the list
+    /// and the conversation can't disagree about whether a ticket is closed.
+    init(server raw: String?) {
+        let value = (raw ?? "open").lowercased()
+        if value.contains("resolve") { self = .resolved }
+        else if value.contains("progress") { self = .inProgress }
+        else { self = .open }
+    }
+
+    /// A resolved ticket is closed for good: no more replies. Replying used to
+    /// flip it straight back to open, so tickets never actually closed.
+    var acceptsReplies: Bool { self != .resolved }
 }
 
 

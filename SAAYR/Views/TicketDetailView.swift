@@ -23,6 +23,9 @@ struct TicketDetailView: View {
     @State private var selectedImageURL: URL?
     @State private var showingFullImage: Bool = false
     @State private var pollingTask: Task<Void, Never>? = nil
+    /// Starts from what the list knew and is then kept current by the poll, so
+    /// a ticket resolved while it's open on screen locks without a reopen.
+    @State private var status: TicketStatus
     
 
     init(ticket: Ticket) {
@@ -31,6 +34,7 @@ struct TicketDetailView: View {
             MessageItem(text: ticket.message, isUser: true, time: ticket.timeAgo),
         ])
         _headerTime = State(initialValue: ticket.timeAgo)
+        _status = State(initialValue: ticket.status)
     }
 
     var body: some View {
@@ -153,7 +157,44 @@ struct TicketDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var inputBar: some View {
+        if status.acceptsReplies {
+            composer
+        } else {
+            resolvedNotice
+        }
+    }
+
+    /// Takes the composer's place once support has resolved the ticket. The
+    /// conversation stays readable; it just can't be continued — a new problem
+    /// is a new ticket.
+    private var resolvedNotice: some View {
+        let isEnglish = languageManager.currentLanguage == .english
+        return HStack(spacing: 10) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundColor(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isEnglish ? "This ticket has been resolved" : "تم حل هذه التذكرة")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(isEnglish
+                     ? "Replies are closed. Open a new ticket if you need more help."
+                     : "تم إغلاق الردود. افتح تذكرة جديدة إذا احتجت إلى مساعدة.")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(UIColor.systemBackground))
+        )
+        .padding()
+    }
+
+    private var composer: some View {
         HStack(spacing: 12) {
             TextField("Type your message...", text: $inputText)
                 .padding()
@@ -182,6 +223,9 @@ struct TicketDetailView: View {
     }
 
     func sendMessage() {
+        // The composer is already gone for a resolved ticket; this catches a
+        // send that raced the poll which resolved it.
+        guard status.acceptsReplies else { return }
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         // optimistic UI update
@@ -284,6 +328,9 @@ struct TicketDetailView: View {
                 case .success(let data):
                     do {
                         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            if let raw = json["status"] as? String {
+                                status = TicketStatus(server: raw)
+                            }
                             if let created = json["created_at"] as? String {
                                     headerTime = formatMessageTime(created)
                                 } else {
