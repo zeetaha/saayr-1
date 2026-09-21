@@ -76,6 +76,19 @@ struct MapView: View {
     @State private var checkInProgress: Double = 0.0
     @State private var checkInRemainingSeconds: Int = 0
     @State private var checkInTimer: Timer? = nil
+    /// When the current dwell began. The countdown is measured against this
+    /// rather than counted down tick by tick — which is what let it freeze:
+    /// a suspended app's timer doesn't fire, so the count stopped and picked
+    /// up again from the same number when the player came back.
+    @State private var dwellStartedAt: Date?
+    /// Keeps the app running long enough to send the final request if the
+    /// player leaves mid-dwell.
+    @State private var dwellBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    /// A check-in that finished while the app was in the background, held
+    /// until the player is back to see how it went.
+    @State private var pendingCheckInOutcome: (success: Bool, message: String)?
+    @Environment(\.scenePhase) private var scenePhase
+    private static let dwellDuration: TimeInterval = 30
     @State private var nearbyFetchWorkItem: DispatchWorkItem? = nil
     @State private var lastNearbyFetchDate: Date? = nil
 
@@ -442,6 +455,16 @@ struct MapView: View {
                 .zIndex(110)
             }
 
+        }
+        .onChange(of: scenePhase) { phase in
+            guard phase == .active else { return }
+            // A dwell that ran out while the app was suspended submits now;
+            // one still going just catches its countdown up.
+            if isDwelling { checkInTick() }
+            if let outcome = pendingCheckInOutcome {
+                pendingCheckInOutcome = nil
+                showCheckInOutcome(success: outcome.success, message: outcome.message)
+            }
         }
         .onAppear {
             locationManager.requestPermission()
@@ -858,6 +881,10 @@ struct MapView: View {
 
     private func cancelDwell() {
         stopCheckInTimer()
+        dwellStartedAt = nil
+        // Background location is for the dwell only — never left on after it.
+        locationManager.setBackgroundUpdates(false)
+        endDwellBackgroundTask()
         isSubmittingFinalCheckIn = false
         isValidating = false
         checkInProgress = 0
@@ -887,9 +914,10 @@ struct MapView: View {
 
                 switch result {
                 case .success:
-                    successMessage = location.isHiddenGem ? "Collected!" : "Check-in successful!"
-                    showSuccessAlert = true
-                    showAlert = false
+                    presentCheckInOutcome(
+                        success: true,
+                        message: location.isHiddenGem ? "Collected!" : "Check-in successful!"
+                    )
                     print("✅ Check-in submitted successfully")
                     let oldKingId = selectedLocation?.king_user_id
                     let locId = selectedLocation?.id
@@ -910,24 +938,28 @@ struct MapView: View {
                         }
                     }
 
+                    // Ended before the refetch, not after: nearby fetches are
+                    // held off while a dwell is running, so the refetch below
+                    // was being silently skipped.
+                    cancelDwell()
+
                     // Then re-read the area regardless: a check-in changes
                     // cooldowns and can change who holds a place, and the
                     // distance gate would otherwise skip this.
                     performNearbyFetch(userLocation.coordinate, ignoringDistance: true)
-
-                    cancelDwell()
                 case .failure(let error):
-                    errorMessage = error.localizedDescription
-                    showAlert = true
-                    showSuccessAlert = false
+                    presentCheckInOutcome(success: false, message: error.localizedDescription)
                     cancelDwell()
                 }
             }
         } else {
             isValidating = false
             isSubmittingFinalCheckIn = false
-            errorMessage = locationUnavailableMessage
-            showAlert = true
+            presentCheckInOutcome(success: false, message: locationUnavailableMessage)
+            // This path never ended the dwell, leaving the card stuck on
+            // "Verifying". With background location tied to the dwell it would
+            // also have left location running with the app closed.
+            cancelDwell()
         }
     }
 
@@ -935,8 +967,15 @@ struct MapView: View {
         withAnimation {
             isDwelling = true
         }
+        dwellStartedAt = Date()
         checkInProgress = 0
-        checkInRemainingSeconds = 30
+        checkInRemainingSeconds = Int(Self.dwellDuration)
+
+        // Leaving the app mustn't stop the check-in. Location keeps running so
+        // the position sent at the end is where the player really is, and the
+        // background task keeps the final request alive.
+        locationManager.setBackgroundUpdates(true)
+        beginDwellBackgroundTask()
 
         stopCheckInTimer()
         checkInTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
@@ -951,14 +990,57 @@ struct MapView: View {
 
     private func checkInTick() {
         DispatchQueue.main.async {
-            guard isDwelling else { return }
-            checkInRemainingSeconds = max(checkInRemainingSeconds - 1, 0)
-            checkInProgress = min(1.0, checkInProgress + (1.0 / 30.0))
+            guard isDwelling, let start = dwellStartedAt else { return }
+            // Measured, not counted: a tick that never fired costs nothing,
+            // because the next one reads the clock and lands on the right
+            // number.
+            let remaining = max(0, Self.dwellDuration - Date().timeIntervalSince(start))
+            checkInRemainingSeconds = Int(remaining.rounded(.up))
+            checkInProgress = min(1.0, 1.0 - remaining / Self.dwellDuration)
 
-            if checkInRemainingSeconds <= 0 {
+            if remaining <= 0 {
                 stopCheckInTimer()
                 submitFinalCheckIn()
             }
+        }
+    }
+
+    private func beginDwellBackgroundTask() {
+        endDwellBackgroundTask()
+        dwellBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "check-in") {
+            // Out of time. With location running this is rare; if it happens,
+            // the dwell is caught up and submitted when the app is next opened.
+            endDwellBackgroundTask()
+        }
+    }
+
+    private func endDwellBackgroundTask() {
+        guard dwellBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(dwellBackgroundTask)
+        dwellBackgroundTask = .invalid
+    }
+
+    /// Shows how a check-in went — or, if it finished with the app in the
+    /// background, holds it for the player's return. The banner dismisses
+    /// itself after a few seconds, so shown to a locked screen it would be
+    /// gone before anyone looked.
+    private func presentCheckInOutcome(success: Bool, message: String) {
+        if UIApplication.shared.applicationState == .active {
+            showCheckInOutcome(success: success, message: message)
+        } else {
+            pendingCheckInOutcome = (success, message)
+        }
+    }
+
+    private func showCheckInOutcome(success: Bool, message: String) {
+        if success {
+            successMessage = message
+            showSuccessAlert = true
+            showAlert = false
+        } else {
+            errorMessage = message
+            showAlert = true
+            showSuccessAlert = false
         }
     }
 

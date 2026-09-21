@@ -96,6 +96,22 @@ final class FilteredLocationManager: NSObject, ObservableObject, CLLocationManag
         manager.stopUpdatingLocation()
     }
 
+    /// Keeps location running while the app is in the background — for the
+    /// length of a check-in only.
+    ///
+    /// A check-in's proof of presence is the position sent when its dwell
+    /// ends. With background updates off, that position freezes at the last
+    /// foreground fix, so someone could start a check-in, lock the phone and
+    /// walk away, and the check-in would still report them standing at the
+    /// door. On for the dwell, off the moment it ends. The blue location
+    /// indicator shows while it's on, which is the honest signal that it is.
+    ///
+    /// Needs `location` in `UIBackgroundModes` — present — and works under
+    /// when-in-use permission, because updates were started in the foreground.
+    func setBackgroundUpdates(_ enabled: Bool) {
+        manager.allowsBackgroundLocationUpdates = enabled
+    }
+
     func resetBuffer() {
         filteredLocations.removeAll()
         lastKnownGoodLocation = nil
