@@ -814,6 +814,17 @@ struct MapView: View {
         }
 
         selectedLocation = location
+
+        // A hidden gem is picked up, not stayed at. The pre-check only exists
+        // to vet a location before committing the player to the 30-second
+        // dwell, so with no dwell there's nothing for it to protect — go
+        // straight to the real call. The server still checks the player is in
+        // range on that call, so presence is enforced either way.
+        if location.isHiddenGem {
+            submitFinalCheckIn()
+            return
+        }
+
         isValidating = true
 
         // Step 1: Lightweight server pre-check (dryRun)
@@ -876,7 +887,7 @@ struct MapView: View {
 
                 switch result {
                 case .success:
-                    successMessage = "Check-in successful!"
+                    successMessage = location.isHiddenGem ? "Collected!" : "Check-in successful!"
                     showSuccessAlert = true
                     showAlert = false
                     print("✅ Check-in submitted successfully")
@@ -887,6 +898,22 @@ struct MapView: View {
                     if oldKingId == UserModel.shared.user?.id, let lid = locId {
                         checkDethroned(locationId: lid, locationName: locName)
                     }
+
+                    // A gem is collected once and then it's gone. The server
+                    // stops sending it, but only on the next fetch — which is
+                    // why it used to sit there until the app was restarted.
+                    // Dropped here so the pin goes as the card closes.
+                    if location.isHiddenGem {
+                        locations.removeAll { $0.uniqueKey == location.uniqueKey }
+                        if selectedLocation?.uniqueKey == location.uniqueKey {
+                            selectedLocation = nil
+                        }
+                    }
+
+                    // Then re-read the area regardless: a check-in changes
+                    // cooldowns and can change who holds a place, and the
+                    // distance gate would otherwise skip this.
+                    performNearbyFetch(userLocation.coordinate, ignoringDistance: true)
 
                     cancelDwell()
                 case .failure(let error):
@@ -1280,8 +1307,13 @@ struct BottomCheckInCard: View {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
-                            Image(systemName: "location.fill")
-                            Text("Check In (+\(merchant.xpReward) XP)")
+                            // A hidden gem is picked up once and gone; every
+                            // other pin is somewhere you return to on a
+                            // cooldown. Same call underneath, different promise.
+                            Image(systemName: merchant.isHiddenGem ? "sparkles" : "location.fill")
+                            Text(merchant.isHiddenGem
+                                 ? "Collect (+\(merchant.xpReward) XP)"
+                                 : "Check In (+\(merchant.xpReward) XP)")
                                 .font(.system(size: 16, weight: .bold))
                         }
                     }
