@@ -740,13 +740,14 @@ struct ShimmerModifier: ViewModifier {
                         endPoint:   UnitPoint(x: phase + 1, y: 0.5)
                     )
                     .blendMode(.screen)
+                    // Scoped to the gradient alone. A repeatForever started
+                    // with withAnimation in onAppear also catches whatever
+                    // layout is settling around it (safe area, tab bar) and
+                    // replays that shift forever — the home screen wobbled.
+                    .animation(.linear(duration: 1.4).repeatForever(autoreverses: false), value: phase)
                 }
             )
-            .onAppear {
-                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
-                    phase = 1.5
-                }
-            }
+            .onAppear { phase = 1.5 }
     }
 }
 
