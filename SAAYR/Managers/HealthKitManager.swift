@@ -2,6 +2,7 @@ import Foundation
 import HealthKit
 import CoreMotion
 import Combine
+import os
 /// Two complementary step-tracking systems:
 ///
 /// 1. **CMPedometer** — real-time, motion-coprocessor accuracy.
@@ -14,6 +15,14 @@ final class HealthKitManager: ObservableObject {
 
     static let shared = HealthKitManager()
     private init() {}
+
+    /// Step syncs log here as well as to the Xcode console, so a sync that
+    /// ran while the app was woken in the background — no debugger attached —
+    /// can still be read in Console.app. Filter: category `StepsSync`.
+    static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.saayr.app",
+        category: "StepsSync"
+    )
 
     // MARK: - Published
 
@@ -168,28 +177,43 @@ final class HealthKitManager: ObservableObject {
 
     // MARK: - Backend-requested sync (silent push)
 
-    /// Longest range one silent push may ask for. iOS gives a background
-    /// wake about 30 seconds, and every day in the range is its own request.
+    /// Longest range one silent push may ask for, so the HealthKit read and
+    /// the upload fit comfortably in the ~30 s iOS gives a background wake.
     static let maxRequestedDays = 31
 
-    /// Reads sensor-only steps for each calendar day from `from` through `to`
-    /// (inclusive, device-local days) and posts one record per day. Days with
-    /// no steps are sent as 0 so the backend can tell "asked and answered"
-    /// apart from "never synced".
+    /// Answers a backend `steps_sync` push: reads sensor-only steps for each
+    /// calendar day from `from` through `to` (inclusive, device-local days)
+    /// and uploads them in one `POST steps/sync`. Days with no steps are sent
+    /// as 0 so the backend can tell "asked and answered" from "never synced".
     ///
-    /// `completion(true)` only when every day was read and accepted — HealthKit
-    /// can't be read while the phone is locked, so a push that lands then
-    /// reports failure and the backend should ask again later.
-    func syncSteps(from: Date, to: Date, source: String, completion: @escaping (Bool) -> Void) {
-        guard isAvailable else { completion(false); return }
-
+    /// A failed HealthKit read is uploaded too, as `status: "error"` — most
+    /// often the phone was locked, and the backend should know the push
+    /// arrived and ask again later. `extra` is merged into the body as-is.
+    ///
+    /// `completion(true)` only when steps were read and the upload accepted.
+    func syncSteps(from: Date, to: Date, extra: [String: Any], completion: @escaping (Bool) -> Void) {
         let cal   = Calendar.current
         let start = cal.startOfDay(for: from)
         let today = cal.startOfDay(for: Date())
         let last  = min(cal.startOfDay(for: to), today)
-        guard start <= last,
-              let end = cal.date(byAdding: .day, value: 1, to: last)
-        else { completion(false); return }
+
+        var body = extra
+        body["from"] = Self.dayFormatter.string(from: start)
+        body["to"]   = Self.dayFormatter.string(from: last)
+
+        func fail(_ reason: String) {
+            Self.log.error("❌ HealthKit read failed: \(reason, privacy: .public)")
+            body["status"] = "error"
+            body["error"]  = reason
+            body["days"]   = [[String: Any]]()
+            postStepsSync(body) { _ in completion(false) }
+        }
+
+        guard isAvailable else { fail("HealthKit not available on this device"); return }
+        guard start <= last, let end = cal.date(byAdding: .day, value: 1, to: last) else {
+            fail("Empty range — from is after to, or in the future")
+            return
+        }
 
         let datePredicate = HKQuery.predicateForSamples(
             withStart: start, end: end, options: .strictStartDate
@@ -209,33 +233,89 @@ final class HealthKitManager: ObservableObject {
             intervalComponents: DateComponents(day: 1)
         )
         query.initialResultsHandler = { [weak self] _, results, error in
-            guard let self, let results, error == nil else {
-                print("❌ HK step range fetch: \(error?.localizedDescription ?? "no results")")
-                completion(false)
+            guard let self else { completion(false); return }
+            guard let results, error == nil else {
+                // Error code 6 (errorDatabaseInaccessible) = phone is locked.
+                fail(error?.localizedDescription ?? "No results")
                 return
             }
 
-            var days: [(date: Date, steps: Int)] = []
+            var days: [[String: Any]] = []
+            var total = 0
             results.enumerateStatistics(from: start, to: last) { stats, _ in
                 let steps = stats.sumQuantity().map { Int($0.doubleValue(for: .count())) } ?? 0
-                days.append((stats.startDate, steps))
+                days.append(["date": Self.dayFormatter.string(from: stats.startDate), "steps": steps])
+                total += steps
             }
-            print("📊 Requested step sync: \(days.count) day(s)")
+            let summary = days.map { "\($0["date"]!)=\($0["steps"]!)" }.joined(separator: " ")
+            Self.log.info("📊 HealthKit read \(days.count) day(s): \(summary, privacy: .public)")
 
-            let group = DispatchGroup()
-            var allSent = true
-            let lock = NSLock()
-            for day in days {
-                group.enter()
-                self.sendStepsToAPI(steps: day.steps, date: day.date, source: source) { ok in
-                    lock.lock(); allSent = allSent && ok; lock.unlock()
-                    group.leave()
-                }
-            }
-            group.notify(queue: .main) { completion(allSent) }
+            body["status"]      = "ok"
+            body["days"]        = days
+            body["total_steps"] = total
+            self.postStepsSync(body, completion: completion)
         }
 
         healthStore.execute(query)
+    }
+
+    /// `POST steps/sync` — the backend stores the body as received, so it
+    /// carries enough context (range, timezone, app state) to read on its own.
+    private func postStepsSync(_ payload: [String: Any], completion: @escaping (Bool) -> Void) {
+        guard let token = UserModel.shared.currentAccessToken, !token.isEmpty else {
+            Self.log.error("⚠️ No auth token — steps/sync not sent")
+            completion(false)
+            return
+        }
+        guard let url = URL(string: WebService.stepsSync) else { completion(false); return }
+
+        var body = payload
+        body["type"]        = "steps_sync"
+        body["platform"]    = "ios"
+        body["source"]      = "healthkit"
+        body["timezone"]    = TimeZone.current.identifier
+        body["synced_at"]   = ISO8601DateFormatter().string(from: Date())
+        body["app_version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys]) else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.httpMethod = "POST"
+        request.httpBody   = httpBody
+        applyHeaders(to: &request, token: token)
+
+        let json = String(data: httpBody, encoding: .utf8) ?? ""
+        Self.log.log("📤 POST steps/sync \(json, privacy: .public)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            var ok = false
+            if let error {
+                Self.log.error("❌ steps/sync failed: \(error.localizedDescription, privacy: .public)")
+            } else if let http = response as? HTTPURLResponse {
+                ok = (200..<300).contains(http.statusCode)
+                let reply = data.flatMap { String(data: $0.prefix(500), encoding: .utf8) } ?? ""
+                if ok {
+                    Self.log.log("✅ steps/sync → HTTP \(http.statusCode) \(reply, privacy: .public)")
+                } else {
+                    Self.log.error("❌ steps/sync → HTTP \(http.statusCode) \(reply, privacy: .public)")
+                }
+            }
+            completion(ok)
+        }.resume()
+    }
+
+    private func applyHeaders(to request: inout URLRequest, token: String) {
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "accept")
+        request.setValue("Bearer \(token)",  forHTTPHeaderField: "Authorization")
+        request.setValue(
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
+            forHTTPHeaderField: "App-Version"
+        )
+        request.setValue(UserModel.shared.languageCode, forHTTPHeaderField: "Language-Code")
     }
 
     // MARK: - API
@@ -247,7 +327,7 @@ final class HealthKitManager: ObservableObject {
             let token = UserModel.shared.currentAccessToken,
             !token.isEmpty
         else {
-            print("⚠️ No auth token — skipping step sync")
+            Self.log.error("⚠️ No auth token — skipping step sync")
             completion?(false)
             return
         }
@@ -270,7 +350,7 @@ final class HealthKitManager: ObservableObject {
             "hour":        hour,
             "minute":      minute,
             "recorded_at": iso.string(from: now),
-            "source":      source   // "pedometer" = live (CMPedometer) | "healthkit" = background batch | "silent_push" = backend-requested
+            "source":      source   // "pedometer" = live (CMPedometer) | "healthkit" = background batch
         ]
 
         guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
@@ -281,22 +361,16 @@ final class HealthKitManager: ObservableObject {
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "POST"
         request.httpBody   = httpBody
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "accept")
-        request.setValue("Bearer \(token)",  forHTTPHeaderField: "Authorization")
-        request.setValue(
-            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
-            forHTTPHeaderField: "App-Version"
-        )
-        request.setValue(UserModel.shared.languageCode, forHTTPHeaderField: "Language-Code")
+        applyHeaders(to: &request, token: token)
 
         URLSession.shared.dataTask(with: request) { _, response, error in
             var ok = false
             if let error {
-                print("❌ Step sync failed: \(error.localizedDescription)")
+                Self.log.error("❌ POST \(dateStr, privacy: .public) [\(source, privacy: .public)] failed: \(error.localizedDescription, privacy: .public)")
             } else if let http = response as? HTTPURLResponse {
-                print("✅ Step sync → HTTP \(http.statusCode) | \(steps) steps on \(dateStr)")
                 ok = (200..<300).contains(http.statusCode)
+                let mark = ok ? "✅" : "❌"
+                Self.log.log("\(mark, privacy: .public) POST \(dateStr, privacy: .public) [\(source, privacy: .public)] \(steps) steps → HTTP \(http.statusCode)")
             }
             completion?(ok)
         }.resume()

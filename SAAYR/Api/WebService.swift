@@ -151,6 +151,8 @@ class WebService {
     // MARK: - Challenges & Health
     static var challenges   = baseUrl + "missions/challenges"
     static var recordSteps  = baseUrl + "record-steps"
+    /// Reply to a `steps_sync` silent push. Stored by the backend as received.
+    static var stepsSync    = baseUrl + "steps/sync"
 
     // MARK: - Payment keys
     static var cvvToken = ""

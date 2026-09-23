@@ -10,6 +10,7 @@ import AppTrackingTransparency
 import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
+import os
 
 class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNotificationCenterDelegate {
   static var notificationsEnabled = false
@@ -35,17 +36,26 @@ class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNot
   
   // MARK: - MessagingDelegate
   func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-    guard let token = fcmToken, AppDelegate.notificationsEnabled else { return }
-    print("FCM Token received: \(token)")
-    
-    // Send token to backend
+    guard let token = fcmToken, AppDelegate.notificationsEnabled else {
+      // Usually fires at launch, before permission is confirmed — the token
+      // is uploaded from setupNotifications() instead.
+      HealthKitManager.log.log("🔑 FCM token arrived before permission — upload deferred")
+      return
+    }
+    AppDelegate.uploadFcmToken(token)
+  }
+
+  /// Every path that obtains a token sends it here, so the backend always
+  /// pushes to this install and not one from an earlier build.
+  static func uploadFcmToken(_ token: String) {
+    HealthKitManager.log.log("🔑 FCM token: \(token, privacy: .public)")
     DispatchQueue.main.async {
       ServiceModel.shared.updateFcmToken(token) { result in
         switch result {
         case .success:
-          print("FCM token sent to backend successfully")
+          HealthKitManager.log.log("🔑 FCM token sent to backend")
         case .failure(let error):
-          print("Failed to send FCM token: \(error)")
+          HealthKitManager.log.error("🔑 FCM token upload FAILED: \(String(describing: error), privacy: .public)")
         }
       }
     }
@@ -55,16 +65,27 @@ class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNot
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
-        print("APNs token received")
+        HealthKitManager.log.log("🍎 APNs registered, device token \(deviceToken.map { String(format: "%02x", $0) }.joined(), privacy: .public)")
 
         Messaging.messaging().apnsToken = deviceToken
+
+        // Only now can Firebase mint a token — asking any earlier fails with
+        // "No APNS token specified before fetching FCM Token".
+        Messaging.messaging().token { token, error in
+            if let error {
+                HealthKitManager.log.error("🔑 FCM token error: \(error.localizedDescription, privacy: .public)")
+            } else if let token {
+                AppDelegate.uploadFcmToken(token)
+            }
+        }
     }
     
 func application(
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        print("Failed to register for remote notifications: \(error)")
+        // Commonly "no valid aps-environment entitlement" — a signing problem.
+        HealthKitManager.log.error("🍎 APNs registration FAILED: \(error.localizedDescription, privacy: .public)")
     }
 
   // MARK: - Silent push
@@ -78,6 +99,9 @@ func application(
     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
     Messaging.messaging().appDidReceiveMessage(userInfo)
+    // Every data push, so "did anything arrive?" has an answer in Console.app
+    // even when the type isn't one handled here.
+    HealthKitManager.log.log("📬 Data push received, type=\(userInfo["type"] as? String ?? "(none)", privacy: .public) keys=\(userInfo.keys.map { "\($0)" }.sorted().joined(separator: ","), privacy: .public)")
     guard (userInfo["type"] as? String) == "steps_sync" else {
       completionHandler(.noData)
       return
@@ -237,27 +261,17 @@ struct SAAYRApp: App {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
                 AppDelegate.notificationsEnabled = true
+                HealthKitManager.log.log("🔔 Notification permission granted — registering with APNs")
+                // The FCM token is fetched and uploaded once APNs answers, in
+                // didRegisterForRemoteNotificationsWithDeviceToken.
                 DispatchQueue.main.async {
                     UIApplication.shared.registerForRemoteNotifications()
                 }
-                print("Notification permission granted")
-                
-                AppDelegate.notificationsEnabled = true
 
-                        DispatchQueue.main.async {
-                            UIApplication.shared.registerForRemoteNotifications()
-                        }
-
-                        Messaging.messaging().token { token, error in
-                            if let error = error {
-                                print("FCM token error: \(error)")
-                            } else if let token = token {
-                                print("FCM token: \(token)")
-                            }
-                        }
-                
-            } else if let error = error {
-                print("Notification permission denied: \(error)")
+            } else {
+                // Without this, registerForRemoteNotifications is never
+                // called, so no push of any kind — silent included — arrives.
+                HealthKitManager.log.error("🔕 Notification permission not granted: \(error?.localizedDescription ?? "denied", privacy: .public)")
             }
         }
     }
