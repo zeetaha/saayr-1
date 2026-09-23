@@ -199,6 +199,26 @@ struct RewardDetailView: View {
                             .cornerRadius(16)
                             .padding(.horizontal)
                             
+                            // MARK: Instructions
+                            if let instructions = data.redemptionInstructions, !instructions.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Instructions")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.gray)
+                                    
+                                    Text(instructions)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.black)
+                                        .lineLimit(nil)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color.white.opacity(0.9))
+                                .cornerRadius(16)
+                                .padding(.horizontal)
+                            }
+                            
                             // MARK: Details
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Details")
@@ -226,24 +246,6 @@ struct RewardDetailView: View {
                             .background(Color.white.opacity(0.9))
                             .cornerRadius(16)
                             .padding(.horizontal)
-                            
-                            // MARK: Instructions
-                            if let instructions = data.redemptionInstructions, !instructions.isEmpty {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Instructions")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.gray)
-                                    
-                                    Text(instructions)
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.black)
-                                        .lineLimit(nil)
-                                }
-                                .padding()
-                                .background(Color.white.opacity(0.9))
-                                .cornerRadius(16)
-                                .padding(.horizontal)
-                            }
                             
                             Spacer(minLength: 20)
                         }
