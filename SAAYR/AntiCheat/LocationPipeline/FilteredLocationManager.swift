@@ -55,12 +55,25 @@ final class FilteredLocationManager: NSObject, ObservableObject, CLLocationManag
     private let stationaryThreshold = 5
     private var locationUpdateCount: Int = 0
 
+    /// Set while the tester's custom location is on; real fixes are ignored
+    /// and `overrideTimer` feeds this point through the pipeline instead.
+    private var overrideCoordinate: CLLocationCoordinate2D?
+    private var overrideTimer: Timer?
+    private var overrideSubscription: AnyCancellable?
+
     // MARK: - Init
 
     override init() {
         self.manager = CLLocationManager()
         super.init()
         configureManager()
+        overrideSubscription = CustomLocation.shared.activeCoordinatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] coordinate in self?.applyOverride(coordinate) }
+    }
+
+    deinit {
+        overrideTimer?.invalidate()
     }
 
     func trace(lastSeconds: TimeInterval = 30) -> [CLLocation] {
@@ -134,6 +147,7 @@ final class FilteredLocationManager: NSObject, ObservableObject, CLLocationManag
 
     func locationManager(_ manager: CLLocationManager,
                          didUpdateLocations locations: [CLLocation]) {
+        guard overrideCoordinate == nil else { return }
         for location in locations {
             processLocation(location)
         }
@@ -154,6 +168,49 @@ final class FilteredLocationManager: NSObject, ObservableObject, CLLocationManag
         DispatchQueue.main.async {
             self.lastLocationError = code
         }
+    }
+
+    // MARK: - Custom location
+
+    private func applyOverride(_ coordinate: CLLocationCoordinate2D?) {
+        overrideTimer?.invalidate()
+        overrideTimer = nil
+        overrideCoordinate = coordinate
+        // Switching between the real and the custom position is a jump, not
+        // travel — the trace shouldn't join the two.
+        resetBuffer()
+
+        guard coordinate != nil else { return }
+        emitOverrideFix()
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            self?.emitOverrideFix()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        overrideTimer = timer
+    }
+
+    /// One fix a second, like Core Location's, a few metres off the chosen
+    /// point: a perfectly still point would fall under `minDistanceDelta`
+    /// every time and leave the dwell trace empty.
+    private func emitOverrideFix() {
+        guard let center = overrideCoordinate else { return }
+        let distance = Double.random(in: 2.5...3.5)
+        let bearing = Double.random(in: 0..<(2 * .pi))
+        let metresPerDegree = 111_000.0
+        let coordinate = CLLocationCoordinate2D(
+            latitude: center.latitude + distance * cos(bearing) / metresPerDegree,
+            longitude: center.longitude + distance * sin(bearing)
+                / (metresPerDegree * cos(center.latitude * .pi / 180))
+        )
+        processLocation(CLLocation(
+            coordinate: coordinate,
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            course: -1,
+            speed: 0,
+            timestamp: Date()
+        ))
     }
 
     // MARK: - Core pipeline

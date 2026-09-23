@@ -228,6 +228,7 @@ class AuthManager: ObservableObject {
                                                 id: userId
                                             )
                                             UserModel.shared.saveUser(user)
+                                            CustomLocation.shared.signedIn(phone: "966" + self.phoneNumber)
                                             self.completeAuthentication()
                                             onResult(isNewUser)
                                         } else {
@@ -318,6 +319,7 @@ class AuthManager: ObservableObject {
                                     id: userId
                                 )
                                 UserModel.shared.saveUser(user)
+                                CustomLocation.shared.signedIn(phone: "966" + self.phoneNumber)
                                 
                                 // Call success closure for UI navigation
                                 onSuccess()
@@ -396,6 +398,7 @@ class AuthManager: ObservableObject {
                                     id: userId
                                 )
                                 UserModel.shared.saveUser(user)
+                                CustomLocation.shared.signedIn(phone: "966" + self.phoneNumber)
                                 
                                 onSuccess()
                             } else {
@@ -616,7 +619,8 @@ class AuthManager: ObservableObject {
         UserModel.shared.removeUser()
 
         UserDefaults.standard.set(false, forKey: "isAuthenticated")
-        
+        CustomLocation.shared.signedOut()
+
         // Clear sensitive data
         phoneNumber = ""
         otpCode = ""

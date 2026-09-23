@@ -1,6 +1,7 @@
 import SwiftUI
 import MapboxMaps
 import CoreLocation
+import Combine
 
 struct MapCameraFocus: Equatable {
     let latitude: Double
@@ -81,6 +82,21 @@ struct MapboxMapContainer: UIViewRepresentable {
         }
 
         mapView.location.options.puckType = MapboxMaps.PuckType.puck2D()
+        // The puck reads its own GPS, not `FilteredLocationManager` — so with
+        // a custom location on, it's pointed at that instead, or the dot
+        // would sit where the tester really is.
+        let gps = AppleLocationProvider()
+        mapView.location.dataModel = LocationDataModel(
+            location: CustomLocation.shared.activeCoordinatePublisher
+                .map { coordinate -> AnyPublisher<[MapboxMaps.Location], Never> in
+                    guard let coordinate else { return gps.onLocationUpdate.eraseToAnyPublisher() }
+                    return Just([MapboxMaps.Location(coordinate: coordinate)]).eraseToAnyPublisher()
+                }
+                .switchToLatest()
+                .receive(on: DispatchQueue.main)
+                .eraseToAnyPublisher(),
+            heading: gps.onHeadingUpdate.eraseToAnyPublisher()
+        )
         // Without a center the camera starts at 0,0 in the Atlantic. Riyadh is
         // the sensible placeholder until the first fix moves us.
         mapView.mapboxMap.setCamera(

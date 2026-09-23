@@ -22,6 +22,8 @@ struct ProfileView: View {
     @State private var showLogoutConfirm = false
     @State private var supportUnreadCount: Int = 0
     @State private var showClaimedRewards = false
+    @State private var showCustomLocation = false
+    @ObservedObject private var customLocation = CustomLocation.shared
 
     
     var body: some View {
@@ -147,6 +149,18 @@ struct ProfileView: View {
                         ){
                             showSetting = true
                         }
+
+                        if customLocation.isAllowed {
+                            ProfileMenuItem(
+                                icon: "location.fill",
+                                label: customLocation.activeCoordinate == nil
+                                    ? "Custom Location"
+                                    : "Custom Location (On)",
+                                gradient: [Color(hex: "#F59E0B"), Color(hex: "#D97706")]
+                            ) {
+                                showCustomLocation = true
+                            }
+                        }
                     }
                     .padding(.horizontal)
 
@@ -206,6 +220,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showSetting) {
             SettingsView()
+        }
+        .sheet(isPresented: $showCustomLocation) {
+            CustomLocationView()
         }
         .fullScreenCover(isPresented: $showClaimedRewards) {
             ClaimedRewardsView()
