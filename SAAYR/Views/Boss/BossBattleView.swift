@@ -102,16 +102,8 @@ final class BossBattleModel: ObservableObject {
     }
 
     func stop() {
-        #if DEBUG
-        // TEMPORARY: the debug switch holds the feed open across screens, so
-        // leaving the battle screen mustn't tear it down. Remove with
-        // BossLiveFeedDebug.
-        if BossLiveFeedDebug.isEnabled {
-            print("🧪 DEBUG: leaving battle screen with the live-feed still open")
-            return
-        }
-        #endif
-
+        // Always this screen's own connection — the debug hold, if on, keeps
+        // a separate one.
         stream?.close()
         stream = nil
         isConnected = false

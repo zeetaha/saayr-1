@@ -166,8 +166,8 @@ struct SAAYRApp: App {
                     setupNotifications()
 
                     #if DEBUG
-                    // TEMPORARY: holds the boss live-feed open for the whole
-                    // session so its SSE frames keep printing. Delayed so the
+                    // TEMPORARY: holds the boss live-feed open while a boss
+                    // is live so its SSE frames keep printing. Delayed so the
                     // token is definitely in place before it authenticates.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         BossLiveFeedDebug.start()
@@ -186,9 +186,15 @@ struct SAAYRApp: App {
                 }
                 if authManager.authState == .authenticated {
                     HealthKitManager.shared.startLiveTracking()
+                    #if DEBUG
+                    BossLiveFeedDebug.start()
+                    #endif
                 }
             } else if phase == .background || phase == .inactive {
                 HealthKitManager.shared.stopLiveTracking()
+                #if DEBUG
+                BossLiveFeedDebug.stop()
+                #endif
             }
         }
         .onChange(of: authManager.authState) { state in
@@ -201,6 +207,9 @@ struct SAAYRApp: App {
             } else {
                 // User logged out — stop receiving HealthKit background wakes
                 HealthKitManager.shared.stopBackgroundDelivery()
+                #if DEBUG
+                BossLiveFeedDebug.stop()
+                #endif
             }
         }
     }
