@@ -160,7 +160,79 @@ final class HealthKitManager: ObservableObject {
             } ?? 0
 
             print("📊 Sensor steps today (HK): \(steps)")
-            self?.sendStepsToAPI(steps: steps, date: startOfDay, completion: completion)
+            self?.sendStepsToAPI(steps: steps, date: startOfDay) { _ in completion?() }
+        }
+
+        healthStore.execute(query)
+    }
+
+    // MARK: - Backend-requested sync (silent push)
+
+    /// Longest range one silent push may ask for. iOS gives a background
+    /// wake about 30 seconds, and every day in the range is its own request.
+    static let maxRequestedDays = 31
+
+    /// Reads sensor-only steps for each calendar day from `from` through `to`
+    /// (inclusive, device-local days) and posts one record per day. Days with
+    /// no steps are sent as 0 so the backend can tell "asked and answered"
+    /// apart from "never synced".
+    ///
+    /// `completion(true)` only when every day was read and accepted — HealthKit
+    /// can't be read while the phone is locked, so a push that lands then
+    /// reports failure and the backend should ask again later.
+    func syncSteps(from: Date, to: Date, source: String, completion: @escaping (Bool) -> Void) {
+        guard isAvailable else { completion(false); return }
+
+        let cal   = Calendar.current
+        let start = cal.startOfDay(for: from)
+        let today = cal.startOfDay(for: Date())
+        let last  = min(cal.startOfDay(for: to), today)
+        guard start <= last,
+              let end = cal.date(byAdding: .day, value: 1, to: last)
+        else { completion(false); return }
+
+        let datePredicate = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: .strictStartDate
+        )
+        let notManualPredicate = NSPredicate(
+            format: "metadata.%K != YES", HKMetadataKeyWasUserEntered
+        )
+        let combined = NSCompoundPredicate(
+            andPredicateWithSubpredicates: [datePredicate, notManualPredicate]
+        )
+
+        let query = HKStatisticsCollectionQuery(
+            quantityType: stepType,
+            quantitySamplePredicate: combined,
+            options: .cumulativeSum,
+            anchorDate: start,
+            intervalComponents: DateComponents(day: 1)
+        )
+        query.initialResultsHandler = { [weak self] _, results, error in
+            guard let self, let results, error == nil else {
+                print("❌ HK step range fetch: \(error?.localizedDescription ?? "no results")")
+                completion(false)
+                return
+            }
+
+            var days: [(date: Date, steps: Int)] = []
+            results.enumerateStatistics(from: start, to: last) { stats, _ in
+                let steps = stats.sumQuantity().map { Int($0.doubleValue(for: .count())) } ?? 0
+                days.append((stats.startDate, steps))
+            }
+            print("📊 Requested step sync: \(days.count) day(s)")
+
+            let group = DispatchGroup()
+            var allSent = true
+            let lock = NSLock()
+            for day in days {
+                group.enter()
+                self.sendStepsToAPI(steps: day.steps, date: day.date, source: source) { ok in
+                    lock.lock(); allSent = allSent && ok; lock.unlock()
+                    group.leave()
+                }
+            }
+            group.notify(queue: .main) { completion(allSent) }
         }
 
         healthStore.execute(query)
@@ -170,24 +242,24 @@ final class HealthKitManager: ObservableObject {
 
     /// Uses URLSession directly so this works inside HealthKit's short
     /// background execution window (Alamofire sessions may be suspended).
-    private func sendStepsToAPI(steps: Int, date: Date, source: String = "healthkit", completion: (() -> Void)? = nil) {
+    private func sendStepsToAPI(steps: Int, date: Date, source: String = "healthkit", completion: ((Bool) -> Void)? = nil) {
         guard
             let token = UserModel.shared.currentAccessToken,
             !token.isEmpty
         else {
             print("⚠️ No auth token — skipping step sync")
-            completion?()
+            completion?(false)
             return
         }
 
         guard let url = URL(string: WebService.recordSteps) else {
-            completion?()
+            completion?(false)
             return
         }
 
         let iso       = ISO8601DateFormatter()
         let now       = Date()
-        let dateStr   = String(iso.string(from: date).prefix(10)) // "2026-04-18"
+        let dateStr   = Self.dayFormatter.string(from: date) // "2026-04-18", device-local day
         let cal     = Calendar.current
         let hour    = cal.component(.hour,   from: now) // 0–23
         let minute  = cal.component(.minute, from: now) // 0–59
@@ -198,11 +270,11 @@ final class HealthKitManager: ObservableObject {
             "hour":        hour,
             "minute":      minute,
             "recorded_at": iso.string(from: now),
-            "source":      source   // "pedometer" = live (CMPedometer) | "healthkit" = background batch
+            "source":      source   // "pedometer" = live (CMPedometer) | "healthkit" = background batch | "silent_push" = backend-requested
         ]
 
         guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
-            completion?()
+            completion?(false)
             return
         }
 
@@ -219,12 +291,25 @@ final class HealthKitManager: ObservableObject {
         request.setValue(UserModel.shared.languageCode, forHTTPHeaderField: "Language-Code")
 
         URLSession.shared.dataTask(with: request) { _, response, error in
+            var ok = false
             if let error {
                 print("❌ Step sync failed: \(error.localizedDescription)")
             } else if let http = response as? HTTPURLResponse {
                 print("✅ Step sync → HTTP \(http.statusCode) | \(steps) steps on \(dateStr)")
+                ok = (200..<300).contains(http.statusCode)
             }
-            completion?()
+            completion?(ok)
         }.resume()
     }
+
+    /// Calendar day in the device's own timezone. ISO8601DateFormatter works
+    /// in UTC, which put a Riyadh midnight on the previous day's date.
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar   = Calendar(identifier: .gregorian)
+        f.locale     = Locale(identifier: "en_US_POSIX")
+        f.timeZone   = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 }

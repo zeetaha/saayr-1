@@ -66,7 +66,25 @@ func application(
     ) {
         print("Failed to register for remote notifications: \(error)")
     }
-  
+
+  // MARK: - Silent push
+  /// Background pushes (`content-available: 1`) land here, not in the
+  /// UNUserNotificationCenter delegate. The backend sends
+  /// `{"type": "steps_sync", "from": "yyyy-MM-dd", "to": "yyyy-MM-dd"}`
+  /// (both dates optional, default today) to pull steps on demand.
+  func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    Messaging.messaging().appDidReceiveMessage(userInfo)
+    guard (userInfo["type"] as? String) == "steps_sync" else {
+      completionHandler(.noData)
+      return
+    }
+    StepsSyncPush.handle(userInfo, completion: completionHandler)
+  }
+
   // MARK: - UNUserNotificationCenterDelegate
   func userNotificationCenter(
     _ center: UNUserNotificationCenter,
