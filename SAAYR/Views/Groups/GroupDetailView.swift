@@ -249,7 +249,7 @@ struct GroupDetailView: View {
         } else if events?.isEmpty == true {
             GroupLockBox(emoji: "🌱", message: copy.emptyFeed)
         } else {
-            ForEach(events ?? []) { event in
+            ForEach(events ?? [], id: \.rowKey) { event in
                 GroupFeedRow(event: event, isEnglish: isEnglish) { reaction in
                     store.react(reaction, on: event.id, in: group.id)
                 }
@@ -299,7 +299,7 @@ struct GroupDetailView: View {
             let me = listed ? nil : mine
             let needsGap = (me?.rank ?? 0) > (rows.last?.rank ?? 0) + 1
 
-            ForEach(rows) { row in
+            ForEach(rows, id: \.rowKey) { row in
                 GroupLeaderRowView(row: row, copy: copy, isMe: row.userId == mine?.userId)
                     .padding(.bottom, 8)
             }
@@ -322,6 +322,20 @@ struct GroupDetailView: View {
             GroupsLoading(text: copy.loading)
         }
     }
+}
+
+// MARK: - Row identity
+
+// Feed and board rows share one LazyVStack, which reuses cells by id. Both
+// ids are plain Ints — an event id and a user id — so when they matched, the
+// board drew a cached feed card in place of that player's row. Prefixing
+// keeps the two lists from ever sharing an id.
+private extension FeedEventDTO {
+    var rowKey: String { "feed-\(id)" }
+}
+
+private extension LeaderboardRowDTO {
+    var rowKey: String { "board-\(userId)" }
 }
 
 // MARK: - Tabs
