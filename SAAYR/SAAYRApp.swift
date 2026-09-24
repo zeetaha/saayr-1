@@ -19,6 +19,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, MessagingDelegate, UNUserNot
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
     FirebaseApp.configure()
     MapPreferences.registerDefaults()
+    // Push sounds live in Library/Sounds; fetches only what's missing or changed.
+    NotificationSoundStore.sync()
     
     // Set up messaging delegate
     Messaging.messaging().delegate = self
