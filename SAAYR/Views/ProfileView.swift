@@ -218,6 +218,11 @@ struct ProfileView: View {
         .fullScreenCover(isPresented: $showSupport) {
                 SupportView()
         }
+        // A cover closing doesn't re-run onAppear, so a ticket read inside
+        // Support would otherwise leave this badge stale.
+        .onChange(of: showSupport) { isPresented in
+            if !isPresented { fetchSupportUnreadCount() }
+        }
         .sheet(isPresented: $showSetting) {
             SettingsView()
         }

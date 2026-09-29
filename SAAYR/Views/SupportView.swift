@@ -7,6 +7,9 @@ struct SupportView: View {
     @State private var showHelpCenter: Bool = false
     @State private var showSubmitTicket: Bool = false
     @State private var showMyTickets: Bool = false
+    /// Tickets with an unread admin reply — the same number Profile shows on
+    /// the Support row, carried down to My Tickets.
+    @State private var unreadTickets: Int = 0
     
     let faqs = [
         FAQ(
@@ -91,7 +94,8 @@ struct SupportView: View {
                                 title: "My Tickets",
                                 titleAr: "تذاكري",
                                 subtitle: "View your support tickets",
-                                gradient: [Color.yellow.opacity(0.7), Color.orange.opacity(0.9)]
+                                gradient: [Color.yellow.opacity(0.7), Color.orange.opacity(0.9)],
+                                badgeCount: unreadTickets
                             )
                             .onTapGesture {
                                 showMyTickets = true
@@ -145,7 +149,21 @@ struct SupportView: View {
             MyTicketsView()
                 .environmentObject(languageManager)
         }
+        .onAppear { fetchUnreadTickets() }
+        // Opening a ticket marks it read, so the count is re-read on the way back.
+        .onChange(of: showMyTickets) { isPresented in
+            if !isPresented { fetchUnreadTickets() }
+        }
         .environment(\.layoutDirection, languageManager.currentLanguage == .arabic ? .rightToLeft : .leftToRight)
+    }
+
+    private func fetchUnreadTickets() {
+        ServiceModel.shared.getRequest(endpoint: WebService.supportUnreadCount) { result in
+            guard case .success(let data) = result,
+                  let json = try? JSONDecoder().decode([String: Int].self, from: data),
+                  let count = json["unread_count"] else { return }
+            DispatchQueue.main.async { unreadTickets = count }
+        }
     }
 }
 
@@ -159,11 +177,18 @@ struct Ticket: Identifiable, Hashable {
     let message: String
     let timeAgo: String
     let status: TicketStatus
+    /// Admin messages the player hasn't opened yet (`unread_count`).
+    var unreadCount: Int = 0
+    /// Last message from either side, falling back to creation — what the
+    /// list sorts by and what `timeAgo` shows, so the two always agree.
+    var lastActivity: Date? = nil
+
+    var hasUnread: Bool { unreadCount > 0 }
 }
 
 
 enum TicketStatus {
-    case inProgress, resolved, open
+    case new, inProgress, resolved, open
 
     /// Read from the server's `status` string. Held in one place so the list
     /// and the conversation can't disagree about whether a ticket is closed.
@@ -171,6 +196,7 @@ enum TicketStatus {
         let value = (raw ?? "open").lowercased()
         if value.contains("resolve") { self = .resolved }
         else if value.contains("progress") { self = .inProgress }
+        else if value == "new" { self = .new }
         else { self = .open }
     }
 
@@ -195,6 +221,7 @@ struct StatusBadge: View {
 
     var label: String {
         switch status {
+        case .new: return "New"
         case .inProgress: return "In Progress"
         case .resolved: return "Resolved"
         case .open: return "Open"
@@ -203,6 +230,7 @@ struct StatusBadge: View {
 
     var badgeColor: Color {
         switch status {
+        case .new: return Color.purple
         case .inProgress: return Color.orange
         case .resolved: return Color.green
         case .open: return Color.blue
@@ -239,6 +267,7 @@ struct ContactCard: View {
     let titleAr: String
     let subtitle: String
     let gradient: [Color]
+    var badgeCount: Int = 0
     @EnvironmentObject var languageManager: LanguageManager
     
     var body: some View {
@@ -274,7 +303,16 @@ struct ContactCard: View {
             }
             
             Spacer()
-            
+
+            if badgeCount > 0 {
+                Text(badgeCount > 99 ? "99+" : "\(badgeCount)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.red))
+            }
+
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.secondary)
