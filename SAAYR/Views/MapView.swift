@@ -410,6 +410,10 @@ struct MapView: View {
                 } else {
                     BottomCheckInCard(
                         merchant: location.asMerchant,
+                        distanceMeters: locationManager.currentLocation.map {
+                            LandmarkGeofence.distance(from: $0.coordinate, to: location)
+                        },
+                        radiusMeters: Double(location.radius_meters),
                         isLoading: isValidating,
                         onCheckIn: { beginCheckIn(location) },
                         onClose: { withAnimation(.easeInOut) { selectedLocation = nil } }
@@ -1306,11 +1310,23 @@ struct CheckInProgressCard: View {
 
 struct BottomCheckInCard: View {
     let merchant: MerchantLocation
+    /// Straight-line distance from the player to the pin; nil until there's
+    /// a location fix, in which case no range badge is shown at all.
+    var distanceMeters: Double? = nil
+    /// `radius_meters` from the nearby API. Only drives the badge — the
+    /// server still decides on the check-in call, so GPS drift near the edge
+    /// can't let anyone in or lock them out.
+    var radiusMeters: Double = 0
     var isLoading: Bool = false
     let onCheckIn: () -> Void
     /// Dismisses the card. Only clears the selection — tapping this pin again,
     /// or any other, brings it straight back.
     var onClose: (() -> Void)? = nil
+
+    /// "85 m" up close, "1.2 km" further out.
+    static func formatted(_ meters: Double) -> String {
+        meters < 1000 ? "\(Int(meters.rounded())) m" : String(format: "%.1f km", meters / 1000)
+    }
 
     var body: some View {
         VStack {
@@ -1367,14 +1383,16 @@ struct BottomCheckInCard: View {
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
                         
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .resizable()
-                                .frame(width: 16, height: 16)
-                                .foregroundColor(.green)
-                            Text("In Range")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.green)
+                        if let distance = distanceMeters {
+                            let inRange = distance <= radiusMeters
+                            HStack(spacing: 4) {
+                                Image(systemName: inRange ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .resizable()
+                                    .frame(width: 16, height: 16)
+                                Text(inRange ? "In Range" : "Out of Range · \(Self.formatted(distance)) away")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundColor(inRange ? .green : .orange)
                         }
                     }
                     
