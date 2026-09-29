@@ -93,6 +93,8 @@ class WebService {
     static func groupMembers(_ id: Int) -> String     { baseUrl + "groups/\(id)/members" }
     static func groupMember(_ id: Int, userID: Int) -> String { baseUrl + "groups/\(id)/members/\(userID)" }
     static func groupRequests(_ id: Int) -> String    { baseUrl + "groups/\(id)/requests" }
+    /// Public groups only: joins at once, no admin approval.
+    static func groupJoin(_ id: Int) -> String        { baseUrl + "groups/\(id)/join" }
     static func groupRequestApprove(_ id: Int, requestID: Int) -> String {
         baseUrl + "groups/\(id)/requests/\(requestID)/approve"
     }

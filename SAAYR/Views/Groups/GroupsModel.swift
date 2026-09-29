@@ -400,18 +400,28 @@ final class GroupsStore: ObservableObject {
     }
 
     func requestJoin(_ id: Int, isEnglish: Bool, completion: @escaping (Bool) -> Void) {
-        GroupsAPI.shared.requestJoin(id) { [weak self] result in
+        let isPublic = group(id)?.isPublic ?? false
+        GroupsAPI.shared.requestJoin(id, isPublic: isPublic) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success:
-                // The button has to change now. The server's own answer is
-                // read on the next open of the screen rather than immediately
-                // — see `loadDetail`, which is careful not to undo this.
                 if var group = self.group(id) {
-                    group.role = .pending
+                    if isPublic {
+                        // Already in. Flipping the role opens the feed and
+                        // board on the spot (the screen watches `isJoined`);
+                        // the re-read brings the real member count and role.
+                        group.role = .member
+                        group.memberCount += 1
+                    } else {
+                        // The button has to change now. `loadDetail` is
+                        // careful not to undo this while the server has no
+                        // answer yet.
+                        group.role = .pending
+                    }
                     details[id] = group
                     replaceInLists(group)
                 }
+                if isPublic { loadDetail(id) }
                 completion(true)
             case .failure(let error):
                 errorMessage = error.displayMessage(isEnglish: isEnglish)

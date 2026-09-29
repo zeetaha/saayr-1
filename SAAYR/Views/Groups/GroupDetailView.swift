@@ -205,15 +205,19 @@ struct GroupDetailView: View {
         if group.role == .pending {
             GroupWideButton(title: copy.requestPending, kind: .ghost, isEnabled: false) {}
         } else {
-            GroupWideButton(title: copy.requestToJoin) {
+            GroupWideButton(title: group.isPublic ? copy.joinGroup : copy.requestToJoin) {
                 store.requestJoin(group.id, isEnglish: isEnglish) { ok in
-                    if ok { toasts.show(copy.toastRequestSent) }
+                    guard ok else { return }
+                    toasts.show(group.isPublic ? copy.toastJoined(group.name) : copy.toastRequestSent)
                 }
             }
         }
 
-        GroupLockBox(emoji: "🔒", message: copy.previewLocked)
-            .padding(.top, 14)
+        // A public group has nothing to wait for, so no lock to explain.
+        if !group.isPublic {
+            GroupLockBox(emoji: "🔒", message: copy.previewLocked)
+                .padding(.top, 14)
+        }
 
         GroupWideButton(title: copy.reportGroup, kind: .ghost) { showReport = true }
             .padding(.top, 14)

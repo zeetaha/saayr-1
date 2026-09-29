@@ -365,8 +365,12 @@ final class GroupsAPI {
 
     /// Asks to join. The answer carries no body worth reading — the group's
     /// own detail is re-read afterwards to learn the new role.
-    func requestJoin(_ id: Int, completion: @escaping (Result<Void, GroupsAPIError>) -> Void) {
-        ServiceModel.shared.postRequestReportingBody(endpoint: WebService.groupRequests(id)) { result, body, status in
+    ///
+    /// A public group is joined outright through `/join`; a private one gets
+    /// a request an admin has to approve.
+    func requestJoin(_ id: Int, isPublic: Bool, completion: @escaping (Result<Void, GroupsAPIError>) -> Void) {
+        let endpoint = isPublic ? WebService.groupJoin(id) : WebService.groupRequests(id)
+        ServiceModel.shared.postRequestReportingBody(endpoint: endpoint) { result, body, status in
             DispatchQueue.main.async {
                 switch result {
                 case .success:

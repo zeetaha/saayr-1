@@ -64,6 +64,7 @@ struct GroupsCopy {
     var leaderboard: String { t("Leaderboard", "المتصدرون") }
     var preview: String     { t("Preview", "معاينة") }
     var requestToJoin: String { t("Request to join", "طلب الانضمام") }
+    var joinGroup: String     { t("Join", "انضم") }
     var requestPending: String { t("⏳ Request pending", "⏳ الطلب قيد المراجعة") }
     var previewLocked: String { t("The feed and leaderboard unlock\nonce your request is approved",
                                   "يفتح النشاط والمتصدرون\nبمجرد الموافقة على طلبك") }
@@ -159,6 +160,7 @@ struct GroupsCopy {
 
     var toastRequestSent: String { t("Request sent — the admin will get back to you",
                                      "أُرسل الطلب — سيرد عليك المشرف") }
+    func toastJoined(_ name: String) -> String { t("You're in \(name) 🎉", "انضممت إلى \(name) 🎉") }
     var toastLinkCopied: String  { t("Link copied ✓", "نُسخ الرابط ✓") }
     var toastNewLink: String     { t("New link ready — the old one is now invalid",
                                      "رابط جديد جاهز — القديم لم يعد صالحًا") }
