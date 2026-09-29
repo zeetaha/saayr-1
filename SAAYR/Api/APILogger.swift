@@ -257,6 +257,48 @@ enum SSELogger {
         print(line)
     }
 
+    /// Every chunk exactly as it came off the socket, before any parsing — the
+    /// way to tell "the server sent nothing" from "the app dropped it".
+    /// Turn off once the stream is trusted; it's noisy.
+    static var logsRawChunks = true
+
+    static func chunk(_ url: URL, _ data: Data) {
+        guard isEnabled, logsRawChunks else { return }
+        let text = String(data: data, encoding: .utf8)
+            .map { $0.replacingOccurrences(of: "\r", with: "\\r").replacingOccurrences(of: "\n", with: "\\n") }
+            ?? "(\(data.count) bytes, not valid UTF-8 on its own)"
+        print("📦 RAW    \(APILogger.path(of: url))  \(data.count)B  \(truncated(text))")
+    }
+
+    /// The headers that decide whether frames reach the app as they're sent:
+    /// the wrong type or any encoding means buffering, and nginx holds small
+    /// events until its buffer fills unless the backend sends
+    /// `X-Accel-Buffering: no`.
+    static func headers(_ response: HTTPURLResponse) {
+        guard isEnabled else { return }
+        func value(_ name: String) -> String { response.value(forHTTPHeaderField: name) ?? "—" }
+        print("""
+        📋 HEADERS content-type: \(value("Content-Type"))  content-encoding: \(value("Content-Encoding"))
+                   x-accel-buffering: \(value("X-Accel-Buffering"))  cache-control: \(value("Cache-Control"))  server: \(value("Server"))
+        """)
+    }
+
+    static func waitingForBytes(_ url: URL, pending: Int) {
+        guard isEnabled else { return }
+        print("⏳ SPLIT  \(APILogger.path(of: url)) — \(pending)B held for a split character")
+    }
+
+    static func keepAlive(_ line: String) {
+        guard isEnabled else { return }
+        print("💓 PING   \(truncated(line))")
+    }
+
+    /// A frame with no `data:` line, which the spec says to ignore.
+    static func skipped(_ frame: String) {
+        guard isEnabled else { return }
+        print("⚠️ SKIP   frame with no data: \(truncated(frame))")
+    }
+
     static func closed(_ url: URL) {
         guard isEnabled else { return }
         print("🔌 CLOSE  \(APILogger.path(of: url))")

@@ -69,6 +69,10 @@ final class EventSource: NSObject {
     /// Bytes that arrived without a frame terminator yet — SSE frames can be
     /// split across packets, so a partial line is normal.
     private var buffer = ""
+    /// Raw bytes not yet decodable as UTF-8. A chunk can end halfway through a
+    /// multi-byte character (Arabic names, emoji); decoding each chunk on its
+    /// own dropped that whole chunk, and the frames in it, without a trace.
+    private var pendingBytes = Data()
 
     private var isClosed = false
     private var retryDelay = EventSource.baseRetryDelay
@@ -93,6 +97,10 @@ final class EventSource: NSObject {
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        // nginx gzips responses. A compressed stream is held by URLSession
+        // until a whole block arrives, which small events never fill — so the
+        // app saw "connected" and then nothing. Ask for it uncompressed.
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         // The stream must never be killed by the request timeout — that's the
         // point of it. Only the resource timeout is left unbounded too.
         request.timeoutInterval = .infinity
@@ -136,6 +144,7 @@ final class EventSource: NSObject {
         session?.invalidateAndCancel()
         session = nil
         buffer = ""
+        pendingBytes = Data()
     }
 
     // MARK: Reconnection
@@ -203,7 +212,12 @@ final class EventSource: NSObject {
         for line in frame.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = String(line)
             // A leading colon is a comment — servers send these as keep-alives.
-            if line.hasPrefix(":") { continue }
+            if line.hasPrefix(":") {
+                #if DEBUG
+                SSELogger.keepAlive(line)
+                #endif
+                continue
+            }
 
             guard let colon = line.firstIndex(of: ":") else { continue }
             let field = String(line[line.startIndex..<colon])
@@ -219,7 +233,16 @@ final class EventSource: NSObject {
             }
         }
 
-        guard !dataLines.isEmpty else { return nil }
+        guard !dataLines.isEmpty else {
+            #if DEBUG
+            // All-comment frames were already logged as pings.
+            let lines = frame.split(separator: "\n")
+            if !lines.isEmpty, !lines.allSatisfy({ $0.hasPrefix(":") }) {
+                SSELogger.skipped(frame)
+            }
+            #endif
+            return nil
+        }
         return SSEMessage(event: event, data: dataLines.joined(separator: "\n"))
     }
 }
@@ -258,13 +281,34 @@ extension EventSource: URLSessionDataDelegate {
 
         #if DEBUG
         SSELogger.opened(url, status: http.statusCode)
+        SSELogger.headers(http)
         #endif
 
         DispatchQueue.main.async { [weak self] in self?.onOpen?() }
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        guard let text = String(data: data, encoding: .utf8) else { return }
+        #if DEBUG
+        SSELogger.chunk(url, data)
+        #endif
+        pendingBytes.append(data)
+        // A split character is at most 3 bytes short, so anything that still
+        // won't decode after a few more chunks is genuinely bad bytes — decode
+        // lossily (bad bytes become �) rather than stall the stream for good.
+        if pendingBytes.count > 64 * 1024, String(data: pendingBytes, encoding: .utf8) == nil {
+            let lossy = String(decoding: pendingBytes, as: UTF8.self)
+            pendingBytes = Data()
+            consume(lossy)
+            return
+        }
+        // Wait for the rest of a split character rather than dropping bytes.
+        guard let text = String(data: pendingBytes, encoding: .utf8) else {
+            #if DEBUG
+            SSELogger.waitingForBytes(url, pending: pendingBytes.count)
+            #endif
+            return
+        }
+        pendingBytes = Data()
         consume(text)
     }
 

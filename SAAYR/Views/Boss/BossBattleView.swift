@@ -254,7 +254,10 @@ struct BossBattleView: View {
 
                 bossCard(battle)
                 statTiles(model.userStats)
-                damageBreakdown(model.userStats, weapons: battle.weapons)
+                // A boss with every weapon switched off has nothing to split.
+                if !breakdownRows(model.userStats, weapons: battle.weapons).isEmpty {
+                    damageBreakdown(model.userStats, weapons: battle.weapons)
+                }
 
                 // Leaderboard above the feed: standings are what the player
                 // is here to move, and burying them under a scrolling feed
@@ -450,50 +453,62 @@ struct BossBattleView: View {
     /// still says something against an older backend.
     private func breakdownRows(_ stats: UserBattleStats, weapons: BossWeapons) -> [DamageSource] {
         let split = stats.damage_breakdown
+        var rows: [DamageSource] = []
 
-        var rows: [DamageSource] = [
-            DamageSource(
-                id: "checkin",
-                icon: "📍",
-                label: isEnglish ? "Check-ins" : "تسجيلات الحضور",
-                damage: split?.checkin
-                    ?? (weapons.checkin.damage ?? 0) * weapons.checkin.used_count
-            )
-        ]
-
-        let partnerDamage = split?.partner_checkin
-            ?? (weapons.partner_checkin?.damage ?? 0) * (weapons.partner_checkin?.used_count ?? 0)
-        // Same escape hatch as the voucher row below: damage the player has
-        // already scored has to appear, or it drops out of the rows and
-        // silently inflates every other row's share.
-        if weapons.partner_checkin != nil || partnerDamage > 0 {
-            rows.append(DamageSource(
-                id: "partner",
-                icon: "🤝",
-                label: isEnglish ? "Partner check-ins" : "تسجيلات لدى الشركاء",
-                damage: partnerDamage
-            ))
+        /// The server's `enabled` decides. Only a backend that doesn't send
+        /// it falls back to the old guess, where damage already scored always
+        /// earns a row.
+        func shows(_ enabled: Bool?, legacy: Bool, damage: Int) -> Bool {
+            enabled ?? (legacy || damage > 0)
         }
 
-        rows.append(DamageSource(
-            id: "steps",
-            icon: "👟",
-            label: isEnglish ? "Steps" : "الخطوات",
-            damage: split?.steps ?? weapons.steps.damage_dealt
-        ))
+        if let checkin = weapons.checkin {
+            let damage = split?.checkin ?? (checkin.damage ?? 0) * checkin.used_count
+            if shows(checkin.enabled, legacy: true, damage: damage) {
+                rows.append(DamageSource(
+                    id: "checkin",
+                    icon: "📍",
+                    label: isEnglish ? "Check-ins" : "تسجيلات الحضور",
+                    damage: damage
+                ))
+            }
+        }
 
-        // Same rule as the weapon card: a boss with no voucher damage
-        // configured doesn't have the weapon at all, so it gets no row —
-        // unless the player has already scored with one, which means the
-        // weapon is live whatever the card config says.
-        let voucherDamage = split?.voucher ?? (weapons.voucher.damage ?? 0) * weapons.voucher.used_count
-        if weapons.voucher.damage != nil || voucherDamage > 0 {
-            rows.append(DamageSource(
-                id: "voucher",
-                icon: "🎟️",
-                label: isEnglish ? "Redemptions" : "الاستبدالات",
-                damage: voucherDamage
-            ))
+        if let partner = weapons.partner_checkin {
+            let damage = split?.partner_checkin ?? (partner.damage ?? 0) * partner.used_count
+            if shows(partner.enabled, legacy: true, damage: damage) {
+                rows.append(DamageSource(
+                    id: "partner",
+                    icon: "🤝",
+                    label: isEnglish ? "Partner check-ins" : "تسجيلات لدى الشركاء",
+                    damage: damage
+                ))
+            }
+        }
+
+        if let steps = weapons.steps {
+            let damage = split?.steps ?? steps.damage_dealt
+            if shows(steps.enabled, legacy: true, damage: damage) {
+                rows.append(DamageSource(
+                    id: "steps",
+                    icon: "👟",
+                    label: isEnglish ? "Steps" : "الخطوات",
+                    damage: damage
+                ))
+            }
+        }
+
+        if let voucher = weapons.voucher {
+            let damage = split?.voucher ?? (voucher.damage ?? 0) * voucher.used_count
+            // Old rule: no voucher damage configured meant no weapon.
+            if shows(voucher.enabled, legacy: voucher.damage != nil, damage: damage) {
+                rows.append(DamageSource(
+                    id: "voucher",
+                    icon: "🎟️",
+                    label: isEnglish ? "Redemptions" : "الاستبدالات",
+                    damage: damage
+                ))
+            }
         }
 
         return rows

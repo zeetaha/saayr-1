@@ -295,16 +295,33 @@ struct DamageBreakdown: Decodable, Sendable {
 /// The three ways to damage a boss. None of them is a button that hits the
 /// boss directly — each is an ordinary app action the server scores.
 struct BossWeapons: Decodable, Sendable {
-    let checkin: WeaponCheckin
+    /// Every weapon is optional and decoded on its own: a boss can leave one
+    /// out, and one missing or malformed weapon used to fail the whole
+    /// battle-state ("Key 'checkin' not found … Path: weapons").
+    let checkin: WeaponCheckin?
     /// The server sends partner check-in as its own weapon, with its own
     /// damage, used count and nearest location — not as a field on `checkin`.
-    /// Optional because a boss can be configured without one.
     let partner_checkin: WeaponCheckin?
-    let steps: WeaponSteps
-    let voucher: WeaponVoucher
+    let steps: WeaponSteps?
+    let voucher: WeaponVoucher?
+
+    private enum CodingKeys: String, CodingKey {
+        case checkin, partner_checkin, steps, voucher
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        checkin = try? c.decodeIfPresent(WeaponCheckin.self, forKey: .checkin)
+        partner_checkin = try? c.decodeIfPresent(WeaponCheckin.self, forKey: .partner_checkin)
+        steps = try? c.decodeIfPresent(WeaponSteps.self, forKey: .steps)
+        voucher = try? c.decodeIfPresent(WeaponVoucher.self, forKey: .voucher)
+    }
 }
 
 struct WeaponCheckin: Decodable, Sendable {
+    /// Whether this boss takes damage from the weapon at all. Nil from a
+    /// backend that predates the flag.
+    let enabled: Bool?
     let damage: Int?
     /// Checking in at a partner location hits harder.
     let partner_damage: Int?
@@ -314,12 +331,13 @@ struct WeaponCheckin: Decodable, Sendable {
     let nearest_location_distance_m: Double?
 
     private enum CodingKeys: String, CodingKey {
-        case damage, partner_damage, used_count
+        case enabled, damage, partner_damage, used_count
         case nearest_location_name, nearest_location_distance_m
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try? c.decodeIfPresent(Bool.self, forKey: .enabled)
         damage = try? c.decodeIfPresent(Int.self, forKey: .damage)
         partner_damage = try? c.decodeIfPresent(Int.self, forKey: .partner_damage)
         used_count = (try? c.decodeIfPresent(Int.self, forKey: .used_count)) ?? 0
@@ -329,6 +347,7 @@ struct WeaponCheckin: Decodable, Sendable {
 }
 
 struct WeaponSteps: Decodable, Sendable {
+    let enabled: Bool?
     let damage_per_250: Int?
     /// Cap on how much walking can contribute for this boss.
     let max_damage: Int?
@@ -336,11 +355,12 @@ struct WeaponSteps: Decodable, Sendable {
     let steps_counted: Int
 
     private enum CodingKeys: String, CodingKey {
-        case damage_per_250, max_damage, damage_dealt, steps_counted
+        case enabled, damage_per_250, max_damage, damage_dealt, steps_counted
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try? c.decodeIfPresent(Bool.self, forKey: .enabled)
         damage_per_250 = try? c.decodeIfPresent(Int.self, forKey: .damage_per_250)
         max_damage = try? c.decodeIfPresent(Int.self, forKey: .max_damage)
         damage_dealt = (try? c.decodeIfPresent(Int.self, forKey: .damage_dealt)) ?? 0
@@ -356,6 +376,7 @@ struct WeaponSteps: Decodable, Sendable {
 }
 
 struct WeaponVoucher: Decodable, Sendable {
+    let enabled: Bool?
     /// Nil when the admin hasn't configured voucher damage for this boss —
     /// the weapon is then hidden rather than shown as worth zero.
     let damage: Int?
@@ -363,11 +384,12 @@ struct WeaponVoucher: Decodable, Sendable {
     let used_count: Int
 
     private enum CodingKeys: String, CodingKey {
-        case damage, used_count
+        case enabled, damage, used_count
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try? c.decodeIfPresent(Bool.self, forKey: .enabled)
         damage = try? c.decodeIfPresent(Int.self, forKey: .damage)
         used_count = (try? c.decodeIfPresent(Int.self, forKey: .used_count)) ?? 0
     }
