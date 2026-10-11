@@ -1328,6 +1328,25 @@ struct BottomCheckInCard: View {
         meters < 1000 ? "\(Int(meters.rounded())) m" : String(format: "%.1f km", meters / 1000)
     }
 
+    @State private var showDirectionsChoice = false
+
+    private enum DirectionsApp { case apple, google }
+
+    /// Both are https links: iOS hands them to the Maps / Google Maps app when
+    /// it's installed, and Google's falls through to the browser when it isn't.
+    private func openDirections(_ app: DirectionsApp) {
+        let destination = "\(merchant.coordinate.latitude),\(merchant.coordinate.longitude)"
+        let urlString: String
+        switch app {
+        case .apple:
+            urlString = "https://maps.apple.com/?daddr=\(destination)&dirflg=d"
+        case .google:
+            urlString = "https://www.google.com/maps/dir/?api=1&destination=\(destination)"
+        }
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
+    }
+
     var body: some View {
         VStack {
             Spacer()
@@ -1395,10 +1414,30 @@ struct BottomCheckInCard: View {
                             .foregroundColor(inRange ? .green : .orange)
                         }
                     }
-                    
+
                     Spacer()
+
+                    Button(action: { showDirectionsChoice = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                            Text("Directions")
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(Color.blue.opacity(0.12)))
+                    }
+                    .fixedSize()
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .confirmationDialog("Directions to \(merchant.name)", isPresented: $showDirectionsChoice, titleVisibility: .visible) {
+                        Button("Apple Maps") { openDirections(.apple) }
+                        Button("Google Maps") { openDirections(.google) }
+                        Button("Cancel", role: .cancel) {}
+                    }
                 }
-                
+                .fixedSize(horizontal: false, vertical: true)
+
                 Button(action: {
                     onCheckIn()
                 }) {
